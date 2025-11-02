@@ -1,11 +1,16 @@
-void IRAM_ATTR Contar_Pulsos() {
-  unsigned long currentTime = micros();
+void IRAM_ATTR Contar_Moneda() {
+  bool currentState = digitalRead(BUTTON_PIN);
 
-  // Debounce de 120 ms (120000 microsegundos)
-  if (currentTime - lastInterruptTime > 130000) {
-    Counter++;
-    MemwriteLimit++;
+  // Detectar solo flanco de bajada REAL
+  if (currentState == LOW && lastState == HIGH) {
+    unsigned long now = micros();
+
+    if (now - lastValidTime > minPulseInterval) {
+      Counter++;        
+      MemwriteLimit++;
+      lastValidTime = now;
+    }
   }
 
-  lastInterruptTime = currentTime;
+  lastState = currentState;
 }

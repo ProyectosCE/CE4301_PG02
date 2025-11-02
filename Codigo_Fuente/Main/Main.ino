@@ -23,13 +23,15 @@ volatile unsigned int MemwriteLimit = 0; //cada cuantas presiones va a escribir 
 volatile bool buttonPressed = false; //estado del boton
 
 
-void IRAM_ATTR Contar_Pulsos();
+void IRAM_ATTR Contar_Moneda();
 
 volatile unsigned long lastInterruptTime = 0; //contador para debouncer
 
 const int memDir = 0; //direccion donde se guarda el Counter
 
-
+volatile bool lastState = HIGH; // con pull-up interno
+volatile unsigned long lastValidTime = 0;
+const unsigned long minPulseInterval = 9000000; // 150ms para evitar doble conteo
 
 
 
@@ -50,7 +52,7 @@ void setup() {
 
 
 
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), Contar_Pulsos, FALLING); //interrupcion
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), Contar_Moneda, CHANGE); //interrupcion
 
 
 
