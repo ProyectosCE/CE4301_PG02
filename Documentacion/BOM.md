@@ -1,87 +1,101 @@
 # Bill of Materials (BOM)
 
 **Proyecto:** Gimmighoul Coin Collector Robot  
-**Curso:** CE4301 - Arquitectura de Computadores I  
+**Curso:** CE4301 – Arquitectura de Computadores I  
 **Instituto Tecnológico de Costa Rica**
+**Fecha:** Noviembre 2025  
+
+> **Base:** Alternativa B (versión con Mini D1 Wemos ESP8266, pesaje por celda de carga, sensor IR de presencia, audio con DFPlayer).  
+> **Tipo de cambio de referencia (31/10/2025):** 1 USD = **₡502.01**
 
 ---
 
-## 1. Microcontrolador y Programación
+## 1) Microcontrolador
 
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|----------------|---------------------------|-----------------------------|-------------------------|------------------|
-| **ESP32-S WiFi + Bluetooth Module** | Microcontrolador principal del sistema, encargado del procesamiento, lectura de sensores y control de actuadores. | Wi-Fi + Bluetooth 4.2, Dual-Core 32-bit, 240 MHz, 3.3 V lógico, soporta UART / I2C / SPI. | [MicroJPM](https://www.microjpm.com/products/ad75611) | 11.95 |
-| **FT232RL USB → UART Converter** | Conversor USB a TTL para programar el ESP32-S mediante conexión serial. | Compatible con 3.3 V y 5 V, USB micro. | [MicroJPM](https://www.microjpm.com/products/ad36517) | 8.50 |
-
----
-
-## 2. Sensores
-
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|----------------|---------------------------|-----------------------------|-------------------------|------------------|
-| **Load Cell TAL221 (100 g Mini Straight Bar)** | Sensor de peso para detección y clasificación de monedas según masa. | Capacidad 100 g, aluminio, 4 galgas, salida diferencial. | [MicroJPM](https://www.microjpm.com/products/ad39155) | 16.95 |
-| **HX711 Load Cell Amplifier** | Módulo amplificador y convertidor ADC de 24 bits para la celda de carga. | Interfaz digital tipo SPI (2 hilos: DT, SCK), 2.7–5 V, bajo ruido. | [CRCibernética](https://www.crcibernetica.com/load-cell-amplifier-hx711/) | 8.95 |
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
+|---|---|---|---|---:|
+| **Mini D1 Wemos ESP8266** | MCU principal: coordina lectura HX711, sensor IR, control de servos, audio y WiFi con la app. | Wi-Fi 2.4 GHz, 3.3 V lógico, UART / I²C / “SPI” (HX711 2-wire), USB para programación. | **Propio del equipo** | **0.00** |
 
 ---
 
-## 3. Actuadores
+## 2) Sensores
 
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|----------------|---------------------------|-----------------------------|-------------------------|------------------|
-| **Servo Motor SG90 (x2)** | Servomotores para: (1) apertura de la tapa del cofre y (2) expulsión o limpieza de la moneda tras medición. | 5 V, 180°, torque 1.8 kg·cm, consumo máx. 700 mA. | [MicroJPM](https://www.microjpm.com/products/mini-servo-towerpro-sg90-con-accesorios/) | 5.95 × 2 |
-
----
-
-## 4. Audio y Comunicación Digital Secundaria
-
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|----------------|---------------------------|-----------------------------|-------------------------|------------------|
-| **DFPlayer Mini MP3 Module** | Módulo reproductor de audio para emitir sonidos del Pokémon al detectar monedas. | UART 9600 bps, DAC 24 bits, salida directa SPK (8 Ω / 0.5 W), soporte FAT16/32. | [CRCibernética](https://www.crcibernetica.com/mini-mp3-player-module/) | 4.95 |
-| **Parlante 8 Ω / 0.5 W** | Reproducción directa del DFPlayer (efecto de sonido). | 57 mm diámetro, SPL 92 dB, rango 120 Hz–12 kHz. | [MicroJPM](https://www.microjpm.com/products/ad29923/) | 3.95 |
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
+|---|---|---|---|---:|
+| **Load Cell TAL221 (100 g Mini Straight Bar)** | Medición de peso de la moneda para inferir su denominación. | Capacidad 100 g, aluminio, puente Wheatstone 4 hilos. | MicroJPM | **16.95** |
+| **HX711 Load Cell Amplifier** | ADC 24-bit y amplificador para la celda; interfaz digital 2 hilos (DT, SCK). | 2.7–5 V, 10/80 SPS, bajo ruido. | CRCibernética | **8.95** |
 
 ---
 
-## 5. Alimentación y Regulación de Energía
+## 3) Actuadores
 
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|----------------|---------------------------|-----------------------------|-------------------------|------------------|
-| **Polymer Li-Ion Battery 3.7 V / 2000 mAh** | Fuente principal recargable del sistema. | 3.7 V nominal, 2000 mAh, protección integrada contra sobrecarga y cortocircuito. | [CRCibernética](https://www.crcibernetica.com/polymer-lithium-ion-battery-3-7v-2000mah/) | 14.95 |
-| **TP4056 Li-Ion Charger (USB-C, Dual Protection)** | Cargador para baterías de ion de litio, entrada USB-C. | Corriente de carga 1 A, protección por sobrecarga y sobredescarga. | [CRCibernética](https://www.crcibernetica.com/tp4056-lithium-battery-charger-module-with-dual-protection-usb-c/) | 4.95 |
-| **MT3608 DC–DC Boost Converter** | Eleva 3.7 V de la batería a 5 V para servos y DFPlayer. | Entrada 2–24 V, salida ajustable hasta 28 V, 2 A máx. | [CRCibernética](https://www.crcibernetica.com/mt3608-2a-2v-24v-dc-dc-booster-power-module/) | 2.49 |
-| **LM2596 DC–DC Buck Converter** | Reduce los 5 V del booster a 3.3 V estables para el ESP32 y sensores. | 4.5–40 V entrada, 1.25–35 V salida, 3 A máx. | [CRCibernetica](https://www.crcibernetica.com/lm2596-dc-dc-buck-converter-step-down-power-module-output-1-25v-35v/) | 4.95 |
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
+|---|---|---|---|---:|
+| **Servo Motor SG90 (x2)** | (1) Levanta la tapa del cofre; (2) empuja/limpia la moneda tras el pesaje. | 5 V, 180°, torque aprox. 1.8 kg·cm. | MicroJPM | **5.95 × 2 = 11.90** |
 
 ---
 
-## 6. Componentes Auxiliares y Montaje
+## 4) Audio
 
-| **Componente** | **Descripción / Función** | **Especificaciones Clave** | **Costo Estimado (USD)** |
-|----------------|---------------------------|-----------------------------|----------------------------|
-| Interruptor ON/OFF | Control general de encendido del sistema (en la línea OUT del TP4056). | Corriente nominal ≥ 2 A, compatible 3.7 V. | Por definir |
-| Cables Dupont / Conectores / Headers | Conexiones entre módulos. | Macho–hembra / macho–macho. | 2.00 |
-| Tornillería y Separadores | Montaje mecánico de la celda de carga, servos y estructura. | M2–M3, separadores 10–15 mm. | Por definir |
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
+|---|---|---|---|---:|
+| **DFPlayer Mini (Módulo MP3)** | Reproduce efecto sonoro al registrar moneda (control por UART). | Soporta FAT16/32, salida SPK directa, 24-bit DAC. | CRCibernética | **4.95** |
+| **Parlante 8 Ω / 0.5 W** | Salida de audio directa del DFPlayer. | Ø ~57 mm, SPL ~92 dB, 120 Hz–12 kHz. | MicroJPM | **3.95** |
 
 ---
 
-## 7. Resumen de Costos
+## 5) Alimentación y Regulación
+
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
+|---|---|---|---|---:|
+| **Li-Ion Polymer 3.7 V / 2000 mAh** | Batería principal recargable del sistema. | 3.7 V nominal, protección integrada. | CRCibernética | **14.95** |
+| **TP4056 1A Charger Module (Mini-B)** | Cargador Li-Ion 1 A sin protección (carga/descarga). | Entrada Mini-B| Microjpm | **4.50** |
+| **MT3608 DC-DC Boost** | Eleva 3.7 V → 5 V (servos + DFPlayer). | 2–24 V in, ~5–28 V out, hasta 1 A recomendado. | CRCibernética | **2.49** |
+| **LM2596 DC-DC Buck** | Reduce 5 V → 3.3 V (ESP8266 + HX711). | 4.5–40 V in, 1.25–35 V out, 3 A máx. | CRCibernética | **4.95** |
+
+---
+
+## 6) Comunicación / Detección de presencia
+
+| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Costo (USD)** |
+|---|---|---|---:|
+| **Sensor IR de presencia (TCRT5000)** | Señal digital para “moneda detectada” antes del pesaje. | Detección de objetos cercanos (0.2 a 2.5 mm) | **1.60** |
+
+---
+
+## 7) 3D e Insumos (variables)
+
+| **Concepto** | **Descripción / Observación** | **Costo** |
+|---|---|---:|
+| **Impresión 3D del cuerpo (Gimmighoul + guías)** | Laimi: **₡50 por gramo**. El costo final depende del peso total impreso. | **₡ 50 × (gramos)** |
+| **Consumibles de conexión** | Cables, headers, tornillería ligera. | — |
+
+---
+
+## 8) Resumen de Costos (según anteproyecto)
 
 | **Categoría** | **Subtotal (USD)** |
-|----------------|--------------------|
-| Microcontrolador y programación | Por definir |
-| Sensores (celda + amplificador) | Por definir |
-| Actuadores (2 servos) | Por definir |
-| Audio y comunicación | Por definir |
-| Alimentación y regulación | Por definir |
-| Auxiliares y montaje | Por definir |
-| **Total Aproximado** | **Por definir** |
+|---|---:|
+| Sensores (TAL221 + HX711) | **16.95 + 8.95 = 25.90** |
+| Actuadores (2× SG90) | **11.90** |
+| Audio (DFPlayer + parlante) | **4.95 + 3.95 = 8.90** |
+| Alimentación y regulación (batería + TP4056 + MT3608 + LM2596) | **14.95 + 4.95 + 2.49 + 4.95 = 27.34** |
+| Microcontrolador (Mini D1 Wemos ESP8266) | **0.00** |
+| **Total Aproximado (sin impresión 3D)** | **$74.04** |
+
+**Total en colones (ref. ₡502.01 / USD):** **₡37 168.82**  
+**Impresión 3D (variable):** **₡50 × (gramos)** → *se suma al total en CRC cuando se defina el peso final.*
 
 ---
 
-## 8. Observaciones Técnicas
+## 9) Observaciones técnicas
 
-- El sistema funciona completamente autónomo con alimentación por batería.  
-- La celda de carga y el HX711 constituyen la **comunicación digital principal** entre el sensor y el ESP32-S.  
-- El DFPlayer Mini usa **UART** como **comunicación digital secundaria** con el ESP32-S.  
-- Todos los módulos son **compatibles a nivel lógico** (3.3 V) y **comparten GND común**.  
-- Se recomienda la adición de **capacitores de desacoplo** (470–1000 µF en 5 V, 100–220 µF en 3.3 V) para evitar caídas de tensión durante picos de corriente.
-
----
+- **Comunicación digital principal:** HX711 (2-wire: DT/SCK) entre celda de carga y ESP8266.  
+- **Comunicación secundaria:** UART entre ESP8266 y DFPlayer Mini para audio.  
+- **Líneas de alimentación recomendadas:**  
+  - Batería 3.7 V → **TP4056** (carga).  
+  - Batería 3.7 V → **MT3608** (boost a 5 V: servos + DFPlayer).  
+  - **LM2596** (buck de 5 V a **3.3 V** para ESP8266 + HX711).  
+- Añadir **desacoplos** en potencia: ≥470–1000 µF en 5 V (picos de los SG90) y 100–220 µF en 3.3 V.  
+- **GND común** para todos los módulos.  
+- El **sensor IR** solo triggea el flujo; la **validación de moneda** se realiza por **peso** (mayor confiabilidad).
