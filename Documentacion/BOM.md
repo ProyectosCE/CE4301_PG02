@@ -3,6 +3,7 @@
 **Proyecto:** Gimmighoul Coin Collector Robot  
 **Curso:** CE4301 – Arquitectura de Computadores I  
 **Instituto Tecnológico de Costa Rica**
+**Fecha:** Noviembre 2025  
 
 > **Base:** Alternativa B (versión con Mini D1 Wemos ESP8266, pesaje por celda de carga, sensor IR de presencia, audio con DFPlayer).  
 > **Tipo de cambio de referencia (31/10/2025):** 1 USD = **₡502.01**
