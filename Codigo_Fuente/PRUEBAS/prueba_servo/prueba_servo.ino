@@ -3,14 +3,16 @@
 
 Servo servo;
 
-const int SERVO_PIN = D1;  // Ahora usamos D1 (GPIO5)
+const int SERVO_PIN  = D1;    
+const int MAX_ANGLE  = 90;   
+const int STEP       = 5;     // Tamaño del paso (más pequeño = más suave)
+const int STEP_DELAY = 20;    // ms entre pasos (20ms = velocidad media-alta)
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Prueba de servo SG92R en D1 mini");
+  Serial.println("Barrido suave 0 -> MAX_ANGLE -> 0");
 
-  // Asociar el servo al pin D1 con rango de pulsos típico
-  // 500–2400 microsegundos suele ir bien para Tower Pro
+  
   servo.attach(SERVO_PIN, 500, 2400);
 
   // Posición inicial
@@ -19,19 +21,21 @@ void setup() {
 }
 
 void loop() {
-  // Barrido 0 -> 180
-  for (int ang = 0; ang <= 180; ang += 10) {
+  // Subir: 0 -> MAX_ANGLE
+  for (int ang = 0; ang <= MAX_ANGLE; ang += STEP) {
     servo.write(ang);
-    delay(300);
+    delay(STEP_DELAY);
   }
 
-  delay(700);
+  // Pausa breve en la posición "abierta"
+  delay(300);
 
-  // Barrido 180 -> 0
-  for (int ang = 180; ang >= 0; ang -= 10) {
+  // Bajar: MAX_ANGLE -> 0
+  for (int ang = MAX_ANGLE; ang >= 0; ang -= STEP) {
     servo.write(ang);
-    delay(300);
+    delay(STEP_DELAY);
   }
 
-  delay(1000);
+  // Pausa en "cerrado"
+  delay(500);
 }
