@@ -1,9 +1,10 @@
 #include <Arduino.h>
 
 // Pines principales
-#define PIN_SENSOR_MONEDA D2     // sensor de moneda (pull-down externo)
+#define PIN_SENSOR_MONEDA D2     // sensor con pull-down externo
 #define PIN_LED_MONEDA    D7     // LED indicador
 #define PIN_SERVO         D1     // servo SG92R
+#define PIN_MOTOR         D8     // transistor del motor DC
 
 // Duración del LED encendido al detectar moneda
 const int T_LED_MONEDA = 300;
@@ -18,6 +19,10 @@ void servo_init();
 void servo_irAAbierto();
 void servo_irACerrado();
 
+// Prototipos del módulo motor
+void motor_init();
+void motor_pulse();
+
 
 void setup() {
   pinMode(PIN_LED_MONEDA, OUTPUT);
@@ -25,11 +30,12 @@ void setup() {
 
   sensorMoneda_init();
   servo_init();
+  motor_init();
 }
 
 
 void loop() {
-  // Verificar si se detectó una moneda
+  // Verificar si se detectó moneda
   if (sensorMoneda_hayNuevaMoneda()) {
 
     // LED indicador
@@ -41,6 +47,10 @@ void loop() {
     servo_irAAbierto();
     delay(300);
     servo_irACerrado();
+    delay(200);
+
+    // Activar motor DC
+    motor_pulse();
   }
 
   delay(10);
