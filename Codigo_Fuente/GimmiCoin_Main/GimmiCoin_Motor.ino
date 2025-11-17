@@ -1,5 +1,5 @@
 // Duración del pulso del motor en milisegundos
-const int T_MOTOR = 2000;
+const int T_MOTOR = 750;
 
 // Inicialización del motor
 void motor_init() {
