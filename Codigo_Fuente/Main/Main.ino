@@ -4,7 +4,7 @@
 
 
 //-------------------------------------------- WEB ----------------------------------------------------------------
-const char* ssid = "Pajaros_universales"; //nombre de la red
+const char* ssid = "GimmiCoin"; //nombre de la red
 const char* password = "12345678"; //contrasenia 
 
 const char* user = "admin"; //para posible seguridad web
@@ -12,7 +12,7 @@ const char* pass = "1234"; //posible seguridad web
 ESP8266WebServer server(80);
 
 //--------------------------------------------PINES-------------------------------------------------------------------
-const int BUTTON_PIN = 5; // GPIO5 = D1
+const int BUTTON_PIN = D2; // GPIO5 = D1
 
 
 

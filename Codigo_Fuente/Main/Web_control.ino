@@ -87,7 +87,7 @@ void handleEstado() {
 
   
   String json = "{\"pulses\":" + String(Counter) +
-                ",\"pressed\":" + String(state == LOW ? "true" : "false") + "}";
+                ",\"pressed\":" + String(state == HIGH ? "true" : "false") + "}";
 
   server.send(200, "application/json", json);
 }
