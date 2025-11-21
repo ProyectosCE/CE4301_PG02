@@ -31,7 +31,7 @@ const int memDir = 0; //direccion donde se guarda el Counter
 
 volatile bool lastState = HIGH; // con pull-up interno
 volatile unsigned long lastValidTime = 0;
-const unsigned long minPulseInterval = 9000000; // para evitar doble conteo
+const unsigned long minPulseInterval = 300000; // para evitar doble conteo
 
 
 
