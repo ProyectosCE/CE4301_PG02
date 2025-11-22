@@ -1,40 +1,110 @@
 #include <HX711.h>
+#include <math.h>   
 
-HX711 balanza;
+static HX711 balanza;
 
-// Factor de calibración tomado de tu código
-float factor_calibracion = 15620.0;
+// Factor de conversión calibrado 
+const float BALANZA_FACTOR_CONVERSION = -13244.0;
 
-// Lectura suavizada (similar a promedioEstable)
-static float balanza_promedioEstable(int muestras) {
-  float suma = 0;
-  for (int i = 0; i < muestras; i++) {
-    suma += balanza.get_units(1);  // ya usa factor de calibración
-    delay(30);                     // evita WDT reset
-  }
-  return suma / muestras;
-}
+// Número de muestras para promediar al leer
+const int BALANZA_NUM_MUESTRAS = 10;
 
-// Inicialización de la balanza con pines definidos en el main
+// Rangos de clasificación (en gramos)
+// 10 colones: ~0.6 (viejas) hasta ~2.2 (nuevas/conmemorativas) 
+const float BAL_MIN_10   = 0.30;
+const float BAL_MAX_10   = 4.00;
+
+// 50 colones: medido ~6.5 g 
+const float BAL_MIN_50   = 5.00;
+const float BAL_MAX_50   = 8.50;
+
+// 100 colones: medido ~9.0–10.1 g
+const float BAL_MIN_100  = 8.50;
+const float BAL_MAX_100  = 12.00;
+
+// Umbral para considerar "sin moneda" (ruido alrededor de cero)
+const float BAL_UMBRAL_SIN_MONEDA = 0.30;
+
+
+// Inicialización de la balanza
+// Debe llamarse una sola vez desde setup(), con los pines DT (DOUT) y SCK
+// por ejemplo: balanza_init(PIN_BALANZA_DOUT, PIN_BALANZA_SCK);
 void balanza_init(int pin_dout, int pin_sck) {
+  // Inicializa el HX711 en los pines indicados
   balanza.begin(pin_dout, pin_sck);
-  balanza.set_scale(factor_calibracion);
-  balanza.tare();
-  delay(1500);  // estabilización
+
+  // Esperar a que el HX711 esté listo
+  while (!balanza.is_ready()) {
+    Serial.println("HX711 no listo...");
+    delay(100);
+  }
+
+  // Tare inicial (sin peso en la balanza)
+  balanza.tare(15);  // promedio de 15 lecturas para offset
+
+  // Configurar el factor de escala
+  balanza.set_scale(BALANZA_FACTOR_CONVERSION);
+
+   Serial.println("[BALANZA] Inicializada con factor de conversion.");
 }
 
-// Lectura filtrada en gramos
+
+// Lectura de peso en gramos
+// Devuelve el peso en gramos usando el factor de conversión calibrado.
+// Usa un promedio de BALANZA_NUM_MUESTRAS lecturas.
+// Si el HX711 no está listo, devuelve 0.0.
 float balanza_leerGramos() {
-  float gramos = balanza_promedioEstable(10);
-  if (gramos < 0) gramos = -gramos;
+  if (!balanza.is_ready()) {
+    // HX711 no listo, devolvemos 0 por seguridad
+    return 0.0;
+  }
+
+  // Lee el peso ya corregido por tare y factor de conversión
+  float gramos = balanza.get_units(BALANZA_NUM_MUESTRAS);
+
   return gramos;
 }
 
-// Clasificación según rangos reales de monedas
-int balanza_clasificarMoneda(float peso) {
-  if (peso > 0.6 && peso < 2.0)  return 1;  // ₡10
-  if (peso > 6.0 && peso < 7.5)  return 2;  // ₡25
-  if (peso > 7.57 && peso < 8.2) return 3;  // ₡50
-  if (peso > 8.2 && peso < 9.5)  return 4;  // ₡100
+
+// Clasificación de moneda por peso
+// Recibe un peso en gramos y devuelve:
+//   0 -> sin moneda / desconocida
+//   1 -> 10 colones
+//   2 -> 50 colones
+//   3 -> 100 colones
+//
+// Nota: esto NO hace lectura del HX711; solo clasifica un valor que le pase.
+// Lo normal será:
+//   float g = balanza_leerGramos();
+//   int tipo = balanza_clasificarMoneda(g);
+int balanza_clasificarMoneda(float gramos) {
+  float peso = gramos;
+
+  // Si por alguna razón llegó negativo, lo pasamos a positivo
+  if (peso < 0) {
+    peso = -peso;
+  }
+
+  // Sin moneda / ruido muy cerca de cero
+  if (fabs(peso) < BAL_UMBRAL_SIN_MONEDA) {
+    return 0;
+  }
+
+  // 10 colones
+  if (peso >= BAL_MIN_10 && peso <= BAL_MAX_10) {
+    return 1;
+  }
+
+  // 50 colones
+  if (peso >= BAL_MIN_50 && peso <= BAL_MAX_50) {
+    return 2;
+  }
+
+  // 100 colones
+  if (peso >= BAL_MIN_100 && peso <= BAL_MAX_100) {
+    return 3;
+  }
+
+  // Si no cae en ningún rango, la consideramos desconocida
   return 0;
 }
