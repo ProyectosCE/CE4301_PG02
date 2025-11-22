@@ -12,10 +12,10 @@ const float FACTOR_CONVERSION = -13244.0;
 
 // UMBRALES Y RANGOS (en gramos)
 
-// Umbral para considerar "sin moneda" (zona muerta alrededor de 0)
-const float UMBRAL_SIN_MONEDA = 1.0;  // |peso| < 0.8 g => sin moneda
+// Zona muerta alrededor de 0 para considerar "sin moneda"
+const float UMBRAL_SIN_MONEDA = 0.80;  // |peso| < 0.8 g => sin moneda
 
-// Rangos de monedas
+// Rangos de monedas (en gramos)
 const float MIN_10   = 0.80;
 const float MAX_10   = 4.00;
 
@@ -29,29 +29,38 @@ const float MAX_100  = 12.00;
 const float TH_COIN_APPEAR = 0.8;  // si sube por encima => posible moneda
 const float TH_COIN_LOST   = 0.4;  // si baja por debajo => moneda retirada
 
-// Estabilidad
+// Estabilidad con moneda
 const float STABILITY_DELTA          = 0.30;   // máx variación para considerar estable
 const unsigned long STABILITY_WINDOW = 800;    // ms para ventana de estabilidad
 
-// Auto-tare
-const unsigned long AUTO_TARE_INTERVAL_MS    = 60000; // mínimo 60s entre auto-tares
-const unsigned long AUTO_TARE_MIN_STABLE_MS  = 10000; // al menos 10s sin moneda y estable
+// Auto-tare (cuando NO hay moneda) 
 
-// ---------- Variables de estado ----------
+const unsigned long AUTO_TARE_INTERVAL_MS    = 60000; // mínimo 60s entre auto-tares
+const unsigned long AUTO_TARE_MIN_STABLE_MS  = 10000; // al menos 10s en reposo antes de auto-tare
+
+const unsigned long ZERO_WINDOW_MS          = 1200;   // ventana corta para medir estabilidad del cero
+const float ZERO_STABILITY_DELTA            = 0.25;   // variación máx alrededor de 0 para considerarlo estable
+
+// Variables de estado
 
 bool coinPresent = false;               // true = ya clasificamos moneda actual
-bool detectingCoin = false;             // true = estamos en ventana de detección/estabilidad
+bool detectingCoin = false;             // true = estamos en ventana de detección/estabilidad con moneda
 
-unsigned long detectionStartMillis = 0; // inicio de ventana para comprobar estabilidad
+unsigned long detectionStartMillis = 0; // inicio de ventana para comprobar estabilidad (moneda)
+float minPesoDetect = 0.0;
+float maxPesoDetect = 0.0;
 
-float minPesoDetect = 0.0;              // min peso visto durante la ventana
-float maxPesoDetect = 0.0;              // max peso visto durante la ventana
+// Auto-tare: ventana de estabilidad cerca de 0
+bool zeroWindowActive = false;
+unsigned long zeroWindowStartMillis = 0;
+float minPesoZero = 0.0;
+float maxPesoZero = 0.0;
 
-unsigned long lastStableNoCoinMillis = 0;
-unsigned long lastAutoTareMillis     = 0;
+unsigned long emptySinceMillis   = 0;   // desde cuándo estamos en "sin moneda"
+unsigned long lastAutoTareMillis = 0;
 
 
-//Clasificación
+// Clasificación 
 
 String clasificarMonedaPorPeso(float peso) {
   if (peso >= MIN_10 && peso <= MAX_10) {
@@ -68,14 +77,14 @@ String clasificarMonedaPorPeso(float peso) {
 }
 
 
-//Setup 
+// Setup
 
 void setup() {
   Serial.begin(115200);
   delay(500);
 
   Serial.println();
-  Serial.println("=== Prueba de Clasificacion de Monedas (evento + estabilidad + auto-tare) ===");
+  Serial.println("Prueba de Clasificacion de Monedas (evento + estabilidad + auto-tare mejorado)");
 
   balanza.begin(HX_DOUT, HX_SCK);
 
@@ -95,8 +104,8 @@ void setup() {
   balanza.set_scale(FACTOR_CONVERSION);
 
   unsigned long now = millis();
-  lastStableNoCoinMillis = now;
-  lastAutoTareMillis     = now;
+  emptySinceMillis   = now;
+  lastAutoTareMillis = now;
 
   Serial.println("Balanza lista. Coloca monedas una por una.");
   Serial.println("Solo se imprimirá cuando la moneda este estable y clasificada.");
@@ -104,72 +113,113 @@ void setup() {
 }
 
 
-//Loop principal
+// Loop principal
 
 void loop() {
   if (!balanza.is_ready()) {
-    // Si el HX711 no está listo, no se hace nada
     delay(50);
     return;
   }
 
-  // Lectura promediada
   float peso = balanza.get_units(5);  // promedio de 5 lecturas
-
   unsigned long now = millis();
 
-  // Auto-tare en reposo
-  // Solo cuando NO hay moneda, el peso está cerca de 0 y ha estado así un buen rato
-  if (!coinPresent && fabs(peso) < UMBRAL_SIN_MONEDA) {
-    // actualiza tiempo de estabilidad sin moneda
-    lastStableNoCoinMillis = now;
+  // AUTO-TARE EN REPOSO
 
-    if ((now - lastAutoTareMillis > AUTO_TARE_INTERVAL_MS) &&
-        (now - lastStableNoCoinMillis > AUTO_TARE_MIN_STABLE_MS)) {
+  bool enZonaCero = (fabs(peso) < UMBRAL_SIN_MONEDA);
 
-      // Hace un pequeño tare para corregir drift
-      balanza.tare(15);
-      lastAutoTareMillis = now;
+  if (!coinPresent && enZonaCero) {
+    // Estamos sin moneda en la balanza
 
-      //  mensaje de depuración
-      Serial.println("[AUTO-TARE] Ajuste de cero realizado.");
+    // Si recién entramos a la zona de cero, inicializamos contadores
+    if (emptySinceMillis == 0) {
+      emptySinceMillis = now;
+    }
+
+    // Ventana para medir estabilidad del cero
+    if (!zeroWindowActive) {
+      zeroWindowActive = true;
+      zeroWindowStartMillis = now;
+      minPesoZero = peso;
+      maxPesoZero = peso;
+    } else {
+      if (peso < minPesoZero) minPesoZero = peso;
+      if (peso > maxPesoZero) maxPesoZero = peso;
+    }
+
+    // Chequeamos estabilidad del cero en ventana corta
+    if (now - zeroWindowStartMillis >= ZERO_WINDOW_MS) {
+      float deltaZero = maxPesoZero - minPesoZero;
+
+      bool ceroEstable = (deltaZero <= ZERO_STABILITY_DELTA);
+
+      bool suficienteTiempoReposo = (now - emptySinceMillis >= AUTO_TARE_MIN_STABLE_MS);
+      bool suficienteTiempoDesdeUltimoTare = (now - lastAutoTareMillis >= AUTO_TARE_INTERVAL_MS);
+
+      if (ceroEstable && suficienteTiempoReposo && suficienteTiempoDesdeUltimoTare) {
+        balanza.tare(15);
+        lastAutoTareMillis = now;
+        emptySinceMillis   = now;   // reiniciamos tiempo de reposo
+
+        Serial.println("[AUTO-TARE] Ajuste de cero realizado.");
+
+        // Reiniciamos ventana de cero después del tare
+        zeroWindowActive = false;
+        zeroWindowStartMillis = now;
+        minPesoZero = maxPesoZero = 0.0;
+      } else {
+        // Reiniciamos ventana corta para volver a evaluar estabilidad
+        zeroWindowActive = false;
+        zeroWindowStartMillis = 0;
+        minPesoZero = maxPesoZero = peso;
+      }
+    }
+
+  } else {
+    // No estamos en zona de cero
+    zeroWindowActive = false;
+    zeroWindowStartMillis = 0;
+    minPesoZero = maxPesoZero = peso;
+    // si no hay moneda pero tampoco estamos bajo el umbral, no contamos como reposo
+    if (!coinPresent && !enZonaCero) {
+      emptySinceMillis = 0;
     }
   }
 
-  //Lógica de detección por evento 
+
+  // DETECCIÓN POR EVENTO (MONEDA)
+
   if (!coinPresent) {
+    // Todavía no hemos clasificado moneda actual
+
     if (!detectingCoin) {
       // Estado base: esperando aparición de moneda
       if (peso > TH_COIN_APPEAR) {
-        // Empezamos ventana de detección/estabilidad
         detectingCoin = true;
         detectionStartMillis = now;
         minPesoDetect = peso;
         maxPesoDetect = peso;
       }
-      // Si peso <= TH_COIN_APPEAR, seguir esperando sin hacer nada
-    } 
-    else {
-      // ventana de detección: moneda parece estar presente
+    } else {
+      // Estamos en ventana de detección/estabilidad con moneda
 
-      // Si el peso cae por debajo del umbral de pérdida, cancelar detección
+      // Si el peso cae por debajo del umbral de pérdida, cancelamos detección
       if (peso < TH_COIN_LOST) {
         detectingCoin = false;
-      } 
-      else {
-        // Actualizar min y max durante la ventana
+      } else {
+        // Actualizamos min y max durante la ventana
         if (peso < minPesoDetect) minPesoDetect = peso;
         if (peso > maxPesoDetect) maxPesoDetect = peso;
 
-        // Verificamos si ya cumplió ventana de estabilidad
+        // Verificamos si ya cumplimos ventana de estabilidad
         if (now - detectionStartMillis >= STABILITY_WINDOW) {
           float delta = maxPesoDetect - minPesoDetect;
 
           if (delta <= STABILITY_DELTA) {
-            // Peso estable: tomar el promedio entre min y max como peso estable
+            // Peso estable: tomamos el promedio entre min y max
             float pesoEstable = (minPesoDetect + maxPesoDetect) / 2.0;
 
-            // Clasificar
+            // Clasificamos
             String tipo = clasificarMonedaPorPeso(pesoEstable);
 
             if (tipo.length() > 0) {
@@ -178,13 +228,12 @@ void loop() {
               Serial.print(" g  ->  ");
               Serial.println(tipo);
 
-              coinPresent = true;
+              coinPresent = true;   // ya clasificamos esta moneda
             }
+            // Salimos de detección (haya o no haya clasificado)
             detectingCoin = false;
-          }
-          else {
-            // Si no está estable aún, extender la ventana:
-            // reiniciar tiempos y min/max para seguir observando
+          } else {
+            // No está estable aún: reiniciamos ventana para seguir observando
             detectionStartMillis = now;
             minPesoDetect = peso;
             maxPesoDetect = peso;
@@ -192,18 +241,14 @@ void loop() {
         }
       }
     }
-  } 
-  else {
-    // Ya clasificada una moneda, esperar a que sea retirada
-
+  } else {
+    // Ya clasificamos una moneda, esperamos a que sea retirada
     if (peso < TH_COIN_LOST) {
-      // Moneda retirada: volvemos al estado base
       coinPresent = false;
       detectingCoin = false;
-      lastStableNoCoinMillis = now;
+      emptySinceMillis = now;  // empezamos a contar reposo otra vez
     }
   }
 
-  // Pequeño delay para no saturar
   delay(80);
 }
