@@ -1,6 +1,5 @@
 #include <Arduino.h>
 
-
 #define PIN_SENSOR_MONEDA   D2     // Sensor de moneda (pull-down externo)
 #define PIN_SERVO           D1     // Servo SG92R
 #define PIN_MOTOR           D8     // Motor DC (transistor)
@@ -36,20 +35,25 @@ void sonido_reproMoneda();
 
 // Balanza
 void balanza_init(int pin_dout, int pin_sck);
-float balanza_leerGramos();
-int balanza_clasificarMoneda(float gramos);
+bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda);
 
 
 void setup() {
+  Serial.begin(115200);
+  delay(300);
 
+  Serial.println();
+  Serial.println(F("=== GimmiCoin - Sistema Principal (con estabilidad) ==="));
 
   sensorMoneda_init();
   servo_init();
   motor_init();
   sonido_init();
   balanza_init(PIN_BALANZA_DOUT, PIN_BALANZA_SCK);
-  
+
+  Serial.println(F("[MAIN] Inicialización completa. Esperando monedas..."));
 }
+
 
 
 void loop() {
@@ -61,47 +65,53 @@ void loop() {
     Serial.print(F("[MAIN] Nueva moneda detectada. Conteo total = "));
     Serial.println(sensorMoneda_getConteo());
 
-    // 1) Leer peso en gramos desde la balanza
-    float gramos = balanza_leerGramos();
-    Serial.print(F("[MAIN] Peso leído = "));
-    Serial.print(gramos, 2);
+    // 1) MEDICIÓN CON ESTABILIDAD
+
+    float peso = 0.0;
+    int tipo  = 0;
+
+    bool estable = balanza_medirMonedaEstable(peso, tipo);
+
+    Serial.print(F("[MAIN] Peso estable medido = "));
+    Serial.print(peso, 2);
     Serial.println(F(" g"));
 
-    // 2) Clasificar la moneda según el peso
-    int tipo = balanza_clasificarMoneda(gramos);
+    Serial.print(F("[MAIN] Tipo moneda detectada = "));
+    Serial.println(tipo);
 
-    // tipo:
-    // 0 -> sin moneda / desconocida
-    // 1 -> 10 colones
-    // 2 -> 50 colones
-    // 3 -> 100 colones
+    if (!estable) {
+      Serial.println(F("[MAIN] ADVERTENCIA: Peso NO fue completamente estable (timeout)."));
+    }
+
+    // 2) ACCIONES SEGÚN TIPO DE MONEDA
 
     if (tipo != 0) {
-      // Moneda reconocida (10, 50 o 100)
+      // Moneda reconocida (10, 50 o 100 colones)
 
       switch (tipo) {
         case 1: Serial.println(F("[MAIN] Moneda reconocida: 10 colones"));  break;
         case 2: Serial.println(F("[MAIN] Moneda reconocida: 50 colones"));  break;
         case 3: Serial.println(F("[MAIN] Moneda reconocida: 100 colones")); break;
-        default: break;
       }
 
-      // a) Reproducir audio
+      // Reproducir audio 
       sonido_reproMoneda();
-      delay(T_SONIDO);  // dejamos sonar un rato
+      delay(T_SONIDO);
 
-      // b) Servo: abrir y cerrar tapa
+      // Servo: abrir y cerrar tapa 
       servo_irAAbierto();
       delay(300);
       servo_irACerrado();
-      delay(200);
+      delay(2000);
 
-      // c) Motor para retirar la moneda de la zona de pesaje
+      //Motor para retirar la moneda
       motor_pulse();
+      delay(2000);
+
 
     } else {
-      // Moneda NO reconocida (fuera de rangos):
-      Serial.println(F("[MAIN] Moneda NO reconocida. Solo se activa el motor para limpieza."));
+      // Moneda NO reconocida
+      Serial.println(F("[MAIN] Moneda NO reconocida. Solo se activa el motor."));
       motor_pulse();
     }
   }
