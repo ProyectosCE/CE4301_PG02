@@ -35,7 +35,7 @@
 
 // Duraciones principales
 const int T_SONIDO     = 2000;
-const unsigned long PRE_MEASURE_DELAY_MS = 6000;  // 6 segundos para que deje de vibrar tras detección
+const unsigned long PRE_MEASURE_DELAY_MS = 3000;  // 6 segundos para que deje de vibrar tras detección
 const unsigned long SERVO_OPEN_SETTLE_MS = 200;  // Reducido
 const unsigned long SERVO_CLOSE_SETTLE_MS = 500; // Reducido para no demorar
 constexpr unsigned long DEEP_SLEEP_SETTLE_MS = 250;  // Tiempo para que la web refleje el último estado
