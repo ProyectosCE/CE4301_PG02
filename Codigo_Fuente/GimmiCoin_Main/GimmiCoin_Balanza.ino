@@ -5,14 +5,14 @@ static HX711 balanza;
 
 
 // Factor de conversión calibrado 
-const float BALANZA_FACTOR_CONVERSION = -13244.0;
+const float BALANZA_FACTOR_CONVERSION = -9950;   
 
 // Número de muestras usadas en cada lectura puntual dentro de la ventana
 const int BALANZA_NUM_MUESTRAS = 3;
 
 // Estabilidad de moneda
 const float BAL_STABILITY_DELTA          = 0.30;   // máx variación (en gramos) para considerar estable
-const unsigned long BAL_STABILITY_WINDOW = 800;    // ventana de estabilidad en ms
+const unsigned long BAL_STABILITY_WINDOW = 1000;    // ventana de estabilidad en ms
 const unsigned long BAL_MAX_TIEMPO_MEDICION = 3000; // timeout total de medición (ms)
 
 // Zona muerta alrededor de 0 para considerar "sin moneda"
@@ -70,10 +70,7 @@ float balanza_leerGramos() {
 int balanza_clasificarMoneda(float gramos) {
   float peso = gramos;
 
-  // Por seguridad, si llega negativo lo hacemos positivo
-  if (peso < 0) {
-    peso = -peso;
-  }
+  
 
   // Zona muerta: sin moneda o ruido
   if (fabs(peso) < BAL_UMBRAL_SIN_MONEDA) {

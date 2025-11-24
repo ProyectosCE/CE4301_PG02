@@ -8,7 +8,7 @@
 HX711 balanza;
 
 // Factor de conversión actual
-const float FACTOR_CONVERSION = -13244.0;
+const float FACTOR_CONVERSION = -8403.0;   
 
 // UMBRALES Y RANGOS (en gramos)
 
@@ -17,7 +17,7 @@ const float UMBRAL_SIN_MONEDA = 0.80;  // |peso| < 0.8 g => sin moneda
 
 // Rangos de monedas (en gramos)
 const float MIN_10   = 0.80;
-const float MAX_10   = 4.00;
+const float MAX_10   = 4.50;
 
 const float MIN_50   = 5.00;
 const float MAX_50   = 8.00;
@@ -35,11 +35,11 @@ const unsigned long STABILITY_WINDOW = 800;    // ms para ventana de estabilidad
 
 // Auto-tare (cuando NO hay moneda) 
 
-const unsigned long AUTO_TARE_INTERVAL_MS    = 60000; // mínimo 60s entre auto-tares
-const unsigned long AUTO_TARE_MIN_STABLE_MS  = 10000; // al menos 10s en reposo antes de auto-tare
+const unsigned long AUTO_TARE_INTERVAL_MS    = 10000; // mínimo 10s entre auto-tares
+const unsigned long AUTO_TARE_MIN_STABLE_MS  = 5000; // al menos 5s en reposo antes de auto-tare
 
 const unsigned long ZERO_WINDOW_MS          = 1200;   // ventana corta para medir estabilidad del cero
-const float ZERO_STABILITY_DELTA            = 0.25;   // variación máx alrededor de 0 para considerarlo estable
+const float ZERO_STABILITY_DELTA            = 0.50;   // variación máx alrededor de 0 para considerarlo estable
 
 // Variables de estado
 
