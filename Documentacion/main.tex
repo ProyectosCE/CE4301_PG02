@@ -1,0 +1,205 @@
+\documentclass[letter,12pt]{article}
+\usepackage[left=2.54cm, right=2.54cm, top=2.54cm, bottom=2.54cm]{geometry}
+\usepackage{setspace}
+\setlength{\parindent}{1.27cm}
+\setlength{\parskip}{0pt}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{csquotes}
+\usepackage{amsmath}
+\usepackage{svg}
+\usepackage{indentfirst}
+
+%==========REFERENCIAS=============
+\usepackage[backend=bibtex,style=ieee,language=spanish]{biblatex}
+\addbibresource{referencias.bib}
+
+\usepackage[
+    xetex,
+    pdftitle={Proyecto Grupal \#2 - Anteproyecto},
+    pdfauthor={Barquero, J., Campos, J., Feng, J., Montero, A.},
+    pdfsubject={CE4301 - Arquitectura de Computadores I},
+    pdfkeywords={ESP8266, ESP32, sistemas embebidos, proyecto de arquitectura, IoT},
+    pdfproducer={LaTeX with hyperref package},
+    pdfcreator={pdfLatex}
+]{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor = black,
+    urlcolor  = blue,
+    citecolor = black,
+    anchorcolor = blue
+}
+
+\begin{document}
+
+% ====== Portada ======
+\begin{titlepage}
+    \centering
+    {\LARGE \textbf{Proyecto Grupal \# 2} \par}
+    {\LARGE Anteproyecto \par}
+    \vspace{1.5cm}
+    {\large José Bernardo Barquero Bonilla \\ 2023150476 \par}
+    {\large Jose Eduardo Campos Salazar \\ 2023135620 \par}
+    {\large Jimmy Feng Feng \\ 2023060347 \par}
+    {\large Alexander Montero Vargas \\ 2023166058 \par}
+    \vspace{1.5cm}
+    {\Large Instituto Tecnológico de Costa Rica \par}
+    {\large Escuela de Ingeniería en Computadores \par}
+    {\large Curso: CE4301 - Arquitectura de Computadores I \par}
+    \vspace{1.5cm}
+    {\large Profesor: Dr.-Ing. Jeferson González Gómez \par}
+    \vfill
+    {\large 24 de octubre de 2025 \par}
+\end{titlepage}
+
+% ====== Desarrollo ======
+\section{Exploración de Alternativas}
+
+\subsection{Alternativa A: Adaptación del Proyecto LogoTEC con Microcontrolador ESP8266}
+
+\subsubsection{Pitch del Proyecto}
+El proyecto LogoTEC fue desarrollado originalmente en el curso de Compiladores e Intérpretes, con el objetivo de crear un compilador e intérprete para un lenguaje de tipo Logo capaz de generar código en C++ e interactuar con un entorno gráfico.  
+La presente alternativa propone trasladar dicho sistema al ámbito físico, reemplazando la “tortuga virtual” por una tortuga robótica controlada mediante un ESP8266 ESP-12E SMT Module, que actuará como el cerebro del sistema.  
+De esta forma, las instrucciones gráficas del lenguaje LogoTEC (como avanza, gira, poncolor, etc.) se traducirán en comandos físicos ejecutados por motores y actuadores reales, permitiendo visualizar en el mundo tangible los resultados del programa.
+
+El prototipo incluirá motores para el desplazamiento de la tortuga y servomotores dedicados a levantar el lápiz y seleccionar el color de dibujo.  
+Además, contará con un acelerómetro con giroscopio, conectado mediante comunicación I²C, para medir giros y orientación, y con un sensor ultrasónico encargado de detectar obstáculos y evitar colisiones.  
+El sistema podrá comunicarse inalámbricamente por medio del WiFi integrado en el microcontrolador, facilitando la transmisión de datos o la interacción con el entorno de ejecución del compilador.  
+De esta manera, LogoTEC se convertirá en una plataforma completa que combina software, hardware y movimiento físico bajo un mismo entorno educativo y demostrativo.
+
+
+\subsubsection{Análisis de Viabilidad Técnica}
+La propuesta es técnicamente factible pero presenta una complejidad considerable.  
+El ESP8266, aunque potente para aplicaciones IoT, dispone de recursos limitados en memoria y pines, lo cual obliga a optimizar el código generado y adaptar la comunicación serial desde el compilador.  
+La conexión entre el entorno de desarrollo (en C++ con Qt y ANTLR4) y el microcontrolador requeriría un protocolo de comunicación serial robusto (por UART) y la creación de un firmware específico para interpretar los comandos LogoTEC.  
+El principal riesgo técnico radica en la adaptación del lenguaje y del flujo de compilación a un entorno embebido, además de las limitaciones de depuración en tiempo real del microcontrolador.
+
+\subsubsection{Estimación de Esfuerzo}
+La implementación de esta alternativa implicaría una fase de diseño y comunicación entre módulos más prolongada que otras opciones, ya que sería necesario integrar el compilador LogoTEC con el microcontrolador ESP8266 ESP-12E y adaptar la lógica de control a nivel de firmware.  
+El tiempo estimado para lograr una integración funcional entre el compilador y el hardware sería de aproximadamente 3 a 4 semanas de trabajo intensivo, considerando las etapas de pruebas, depuración de comunicación UART y validación de movimiento físico.
+
+En cuanto al costo, se presenta a continuación un desglose de los componentes necesarios, tomando en cuenta precios obtenidos de tiendas locales y materiales previamente disponibles en el laboratorio del grupo:
+
+\begin{itemize}
+    \item \textbf{ESP8266 ESP-12E SMT Module:} \$5.95
+    \item \textbf{Servomotores (x2):} \$11.90 (\$5.95 c/u)
+    \item \textbf{Giroscopio con Acelerómetro:} \$6.95
+    \item \textbf{Sensor ultrasónico:} \$5.95
+    \item \textbf{Módulo Expander I2C GPIO:} \$9.95
+    \item \textbf{Módulo USB a TTL (UART):} \$8.50
+    \item \textbf{Componentes pasivos (resistencias, capacitores, cables):} \$7.50
+    \item \textbf{Alimentación (batería y cargador):} \$14.95
+    \item \textbf{Impresión 3D de llantas y chasis:} 50 colones/gramo, estimado en 400 g $\approx$ 20\,000 colones ($\approx\$39.84$)
+    \item \textbf{Motores DC (x2) y Driver L298:} ya disponibles
+\end{itemize}
+
+El costo total estimado asciende a:
+\[
+\text{Costo total} = 5.95 + 11.90 + 6.95 + 5.95 + 9.95 + 8.50 + 7.50 + 14.95 + 39.84 = \textbf{\$111.49}
+\]
+
+Aplicando el tipo de cambio del 31 de octubre de 2025 (1\,USD = 502.01\,CRC), se obtiene un costo aproximado de:
+
+\[
+111.49 \times 502.01 \approx \textbf{55\,980 colones}
+\]
+
+Este valor representa una inversión moderada en comparación con proyectos más complejos, justificando la viabilidad económica del prototipo para el alcance académico propuesto.
+
+
+\subsubsection{Valor Diferencial}
+El valor distintivo de esta alternativa radica en la integración de un compilador real con un sistema físico, permitiendo observar de manera tangible la traducción de instrucciones de un lenguaje de alto nivel hacia acciones mecánicas.  
+Además, el proyecto aporta un valor educativo significativo, ya que por ejemplo programas como lo puede ser Micromundos (que tiene un parecido prácticamente a LogoTEC), no tienen algún componente en hardware que pueda mostrar físicamente el dibujo realizado por la persona en el software del mismo, por tanto el valor agregado en la parte educativa que da esta alternativa es un gran punto a favor en comparación a otro tipo de alternativas.
+
+
+\subsection{Alternativa B: Alcancía Inteligente Basada en el Pokémon \textit{Gimmighoul}}
+
+\subsubsection{Pitch del Proyecto}
+Esta alternativa propone el desarrollo de una alcancía inteligente con forma del Pokémon Gimmighoul, personaje que representa cofres y monedas, incorporando un sistema de detección, pesaje y registro digital del dinero almacenado.  
+El sistema funcionará de manera autónoma mediante un microcontrolador Mini D1 Wemos ESP8266, encargado de coordinar la lectura de una celda de carga conectada al módulo HX711 a través de comunicación SPI para determinar el peso de cada moneda insertada.  
+Un sensor infrarrojo detectará el ingreso de la moneda, activando un servomotor que levantará parcialmente la tapa del cofre simulando la animación del personaje.  
+Una vez medida la moneda, un segundo servomotor empujará la pieza hacia el compartimento interior, liberando la celda de carga para el siguiente registro.  
+Al completarse el proceso, un módulo MP3 reproducirá un sonido característico.
+
+El sistema contará con conectividad inalámbrica mediante WiFi, lo que permitirá enviar los datos de ahorro a una aplicación móvil dedicada.  
+En esta aplicación, el usuario podrá visualizar el monto total almacenado y recibir actualizaciones automáticas cada vez que se inserte una moneda.  
+
+
+\subsubsection{Análisis de Viabilidad Técnica}
+La arquitectura electrónica propuesta emplea componentes de bajo costo, amplia documentación y alta disponibilidad local.  
+El sistema central estará basado en el Mini D1 Wemos ESP8266, con comunicación digital tipo pseudo-SPI entre el microcontrolador y el módulo HX711 para el procesamiento de señales provenientes de la celda de carga.  
+El sistema será alimentado por una batería recargable de 3.7V y 2000mAh, controlada mediante un módulo cargador TP4056 y un conversor MT3608 que eleva el voltaje a 5V, posteriormente regulado a 3.3V con un LM2596.  
+El diseño se implementará en una placa perforada, optimizando la integración de módulos y asegurando una estructura ordenada.  
+El nivel de complejidad es medio, al requerir sincronización entre detección de moneda, lectura de peso, control de servomotores y reproducción de audio, pero el riesgo técnico es bajo dado que los módulos cuentan con ejemplos y librerías compatibles con el entorno Arduino.
+
+\subsubsection{Estimación de Esfuerzo}
+El desarrollo de esta alternativa se estima en un periodo de 2 a 3 semanas, distribuidas entre el diseño electrónico, la programación del firmware (lectura de peso, control de servos, reproducción de audio y registro de datos), y la construcción de la estructura física del cofre mediante impresión 3D.
+
+El siguiente desglose presenta los costos estimados de los componentes necesarios para el prototipo, utilizando precios de tiendas locales y considerando materiales ya disponibles en el laboratorio del grupo:
+
+\begin{itemize}
+    \item \textbf{Mini D1 Wemos ESP8266:} ya disponible
+    \item \textbf{Servomotores SG90-180° (x2):} \$11.90 (\$5.95 c/u)
+    \item \textbf{Mini Celda de Carga 100 g - Barra (TAL221):} \$16.95
+    \item \textbf{Amplificador de Celda de Carga HX711:} \$8.95
+    \item \textbf{MT3608 Booster:} \$2.49
+    \item \textbf{LM2596 Buck Converter:} \$4.95
+    \item \textbf{TP4056 Charger (USB-C Dual Protection):} \$4.95
+    \item \textbf{Batería Li-Ion 3.7V 2000mAh:} \$14.95
+    \item \textbf{Mini MP3 Player Module:} \$4.95
+    \item \textbf{Parlante 8$\Omega$ 0.5W:} \$3.95
+    \item \textbf{Componentes pasivos (resistencias, capacitores, cables, conectores):} \$7.50
+    \item \textbf{Impresión 3D del cofre (400 g a 50 colones/gramo):} 20\,000 colones ($\approx\$39.84$)
+\end{itemize}
+
+El costo total estimado es:
+\[
+11.90 + 16.95 + 8.95 + 2.49 + 4.95 + 4.95 + 14.95 + 4.95 + 3.95 + 7.50 + 39.84 = \textbf{\$121.38}
+\]
+
+Aplicando el tipo de cambio del 31 de octubre de 2025 (1\,USD = 502.01\,CRC), el costo total aproximado es:
+\[
+121.38 \times 502.01 \approx \textbf{60\,900 colones}
+\]
+
+Este valor es razonable considerando la complejidad del sistema, la autonomía energética y la interacción física y digital que se busca lograr.
+
+\vspace{0.3cm}
+
+\subsubsection{Valor Diferencial}
+El valor diferencial de esta propuesta radica en su combinación de creatividad, funcionalidad e interactividad.  
+A diferencia de una alcancía convencional, este sistema permite conocer en tiempo real el monto ahorrado sin necesidad de abrir el cofre, gracias a la comunicación con una aplicación móvil desarrollada para el registro de los depósitos físicos.  
+Su integración de detección por peso, animación mecánica y respuesta sonora otorga una representación física y emocional al acto de ahorrar, transformando un proceso cotidiano en una experiencia tecnológica y didáctica.
+
+
+
+\subsection{Comparativo General}
+
+\begin{table}[H]
+\centering
+\caption{Resumen comparativo entre alternativas propuestas}
+\begin{tabular}{|p{4cm}|p{5cm}|p{5cm}|}
+\hline
+\textbf{Criterio} & \textbf{Alternativa A (LogoTEC - ESP8266 ESP-12E)} & \textbf{Alternativa B (Alcancía Gimmighoul - D1 Mini ESP8266)} \\ \hline
+\textbf{Complejidad técnica} & Alta (requiere integración del compilador con el microcontrolador y manejo de firmware especializado) & Media (ensamble modular con lectura de peso, servo y audio) \\ \hline
+\textbf{Costo estimado} & \$111.49 (\(\approx\) ₡55\,980) & \$121.38 (\(\approx\) ₡60\,900) \\ \hline
+\textbf{Tiempo de desarrollo} & 3–4 semanas & 2–3 semanas \\ \hline
+\textbf{Riesgo técnico} & Alto (sincronización software–hardware y limitaciones de comunicación) & Bajo–medio (módulos ampliamente documentados y probados) \\ \hline
+\textbf{Nivel de innovación} & Alto en integración software–hardware y aplicación educativa & Alto en concepto temático, medio en complejidad técnica \\ \hline
+\textbf{Impacto y demostrabilidad} & Educativo–técnico (traducción de código a ejecución física) & Interactivo y didáctico (detección de monedas, animación y sonido) \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection*{Conclusión de la Exploración}
+Tras el análisis comparativo, la alternativa B representa la opción más equilibrada entre viabilidad, originalidad y esfuerzo de implementación.  
+Su desarrollo integra detección de eventos, medición de peso, control de servomotores, reproducción de audio y gestión energética en un único sistema embebido.  
+Además, presenta un menor riesgo técnico, tiempos de desarrollo reducidos y un costo razonable considerando su nivel de interacción y autonomía.  
+Por estas razones, la alternativa B se selecciona como la propuesta final a desarrollar.
+
+
+\printbibliography
+
+\end{document}
