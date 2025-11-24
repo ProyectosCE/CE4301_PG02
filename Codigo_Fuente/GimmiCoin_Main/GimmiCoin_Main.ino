@@ -123,6 +123,10 @@ uint32_t sensorMoneda_getConteo();
 // Motor 
 void motor_init();
 void motor_pulse();
+void motor_start();
+void motor_stop();
+bool motor_isActive();
+unsigned long motor_pulseDurationMs();
 
 // Servo
 void servo_init();
@@ -394,13 +398,33 @@ void processStateMachine() {
             break;
         }
 
-        sonido_reproMoneda();
-        waitWithServer(T_SONIDO);
+        // Preparar compuerta antes de transporte
         servo_irAAbierto();
         waitWithServer(SERVO_OPEN_SETTLE_MS);
         servo_irACerrado();
         waitWithServer(SERVO_CLOSE_SETTLE_MS);
-        motor_pulse();
+
+        // Iniciar motor y sonido en paralelo
+        const unsigned long actionStart = millis();
+        motor_start();
+        sonido_reproMoneda();
+
+        while (true) {
+          pumpServer();
+          const unsigned long elapsed = millis() - actionStart;
+
+          if (elapsed >= motor_pulseDurationMs()) {
+            motor_stop();
+          }
+
+          if (elapsed >= T_SONIDO && !motor_isActive()) {
+            break;
+          }
+
+          delay(5);
+        }
+
+        motor_stop();
 
         fsmCtx.actuationDone = true;
       }
@@ -503,6 +527,8 @@ void persistCounter(const char* reason, bool dueToInactivity) {
   Serial.println(counterValue);
   Serial.print(F("[EEPROM] Dinero acumulado = ₡"));
   Serial.println(moneyValue);
+
+  pumpServer();
 
   if (dueToInactivity) {
     scheduleDeepSleep();
