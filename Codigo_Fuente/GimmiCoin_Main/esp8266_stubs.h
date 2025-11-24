@@ -18,7 +18,15 @@ class WiFiClass {
  public:
   void softAP(const char*, const char*) {}
   IPAddress softAPIP() { return IPAddress(); }
+  void forceSleepBegin() {}
 };
 
 inline WiFiClass WiFi;
+
+class ESPClass {
+ public:
+  void deepSleep(uint64_t) {}
+};
+
+inline ESPClass ESP;
 

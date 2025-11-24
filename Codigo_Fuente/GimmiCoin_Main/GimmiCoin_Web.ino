@@ -142,7 +142,11 @@ setInterval(function() {
 </html>
 )rawliteral";
 
-	server.send(200, "text/html; charset=utf-8", html);
+		#if GM_USING_ARDUINO_CORE
+			server.send(200, "text/html; charset=utf-8", String(html));
+		#else
+			server.send(200, "text/html; charset=utf-8", html);
+		#endif
 }
 
 /* Function: handleEstado
@@ -163,7 +167,11 @@ static void handleEstado() {
 					 static_cast<unsigned long>(getCoinCounter()),
 					 static_cast<unsigned long>(getMoneyTotal()),
 					 activo ? "true" : "false");
+	#if GM_USING_ARDUINO_CORE
+		server.send(200, "application/json", String(buffer));
+	#else
 		server.send(200, "application/json", buffer);
+	#endif
 }
 
 /* Function: handleAdmin
@@ -222,7 +230,11 @@ load();
 </html>
 )rawliteral";
 
-	server.send(200, "text/html; charset=utf-8", html);
+		#if GM_USING_ARDUINO_CORE
+			server.send(200, "text/html; charset=utf-8", String(html));
+		#else
+			server.send(200, "text/html; charset=utf-8", html);
+		#endif
 }
 
 /* Function: handleReset
@@ -250,5 +262,9 @@ static void handleReset() {
 					"{\"ok\":true,\"pulses\":%lu,\"money\":%lu}",
 					static_cast<unsigned long>(getCoinCounter()),
 					static_cast<unsigned long>(getMoneyTotal()));
+		#if GM_USING_ARDUINO_CORE
+			server.send(200, "application/json", String(buffer));
+		#else
 			server.send(200, "application/json", buffer);
+		#endif
 }

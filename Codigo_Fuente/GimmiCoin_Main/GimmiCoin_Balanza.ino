@@ -15,20 +15,13 @@ const float BAL_STABILITY_DELTA          = 0.30;   // máx variación (en gramos
 const unsigned long BAL_STABILITY_WINDOW = 1000;    // ventana de estabilidad en ms
 const unsigned long BAL_MAX_TIEMPO_MEDICION = 3000; // timeout total de medición (ms)
 
-// Zona muerta alrededor de 0 para considerar "sin moneda"
-const float BAL_UMBRAL_SIN_MONEDA = 0.80;  // |peso| < 0.8 g => sin moneda/ruido
-
-// 10 colones (viejas + nuevas): aprox 0.6–2.2 g → dejamos margen seguro
-const float BAL_MIN_10   = 0.80;
-const float BAL_MAX_10   = 4.00;
-
-// 50 colones: medido ~6.5 g → margen amplio
-const float BAL_MIN_50   = 5.00;
-const float BAL_MAX_50   = 8.00;
-
-// 100 colones: medido ~9.0–10.1 g
-const float BAL_MIN_100  = 8.50;
-const float BAL_MAX_100  = 12.00;
+// Rangos aproximados medidos para cada denominación (en gramos)
+//   0.55 – 2.30  -> ₡10 (monedas livianas)
+//   2.30 – 4.52  -> ₡10 (monedas pesadas)
+//   4.52 – 6.27  -> ₡50
+//   6.27 – 8.00  -> ₡25
+//   8.00 – 9.75  -> ₡100
+//   9.75 – 12.0  -> ₡500
 
 
 // Debe llamarse una sola vez desde setup(), con los pines DOUT y SCK:
@@ -84,47 +77,43 @@ float balanza_leerGramos() {
 
 
 // Clasificación de moneda por peso
-// Recibe un peso en gramos y devuelve:
-//   0 -> sin moneda / desconocida
-//   1 -> 10 colones
-//   2 -> 50 colones
-//   3 -> 100 colones
+// Devuelve el valor nominal en colones o -1 si no coincide con ningún rango conocido.
 /* Function: balanza_clasificarMoneda
-   Determina el tipo de moneda a partir del peso medido.
+   Determina la denominación en colones de una moneda según su peso.
 
    Params:
      - gramos: float - peso de la moneda en gramos.
 
    Returns:
-     - int - código asignado a la denominación (0 sin coincidencia).
+     - int - valor nominal en colones o -1 si el peso no corresponde a una moneda válida.
 */
 int balanza_clasificarMoneda(float gramos) {
-  float peso = gramos;
-
-  
-
-  // Zona muerta: sin moneda o ruido
-  if (fabs(peso) < BAL_UMBRAL_SIN_MONEDA) {
-    return 0;
+  if (!isfinite(gramos) || gramos <= 0.0F) {
+    return -1;
   }
 
-  // 10 colones
-  if (peso >= BAL_MIN_10 && peso <= BAL_MAX_10) {
-    return 1;
+  const float w = gramos;
+
+  if (w >= 0.55F && w < 2.30F) {
+    return 10;
+  }
+  if (w >= 2.30F && w < 4.52F) {
+    return 10;
+  }
+  if (w >= 4.52F && w < 6.27F) {
+    return 50;
+  }
+  if (w >= 6.27F && w < 8.00F) {
+    return 25;
+  }
+  if (w >= 8.00F && w < 9.75F) {
+    return 100;
+  }
+  if (w >= 9.75F && w < 12.0F) {
+    return 500;
   }
 
-  // 50 colones
-  if (peso >= BAL_MIN_50 && peso <= BAL_MAX_50) {
-    return 2;
-  }
-
-  // 100 colones
-  if (peso >= BAL_MIN_100 && peso <= BAL_MAX_100) {
-    return 3;
-  }
-
-  // Fuera de todos los rangos conocidos
-  return 0;
+  return -1;
 }
 
 
@@ -138,7 +127,7 @@ int balanza_clasificarMoneda(float gramos) {
 //   - Si se logra estabilidad:
 //       - Devuelve true,
 //       - Escribe en pesoEstable el peso promedio de la ventana,
-//       - Escribe en tipoMoneda la clasificación (1,2,3 o 0).
+//       - Escribe en tipoMoneda el valor nominal detectado (₡10, ₡25, ₡50, ₡100, ₡500) o -1 si es inválido.
 //   - Si NO se logra estabilidad antes del timeout:
 //       - Devuelve false,
 //       - Devuelve igualmente el último peso medido en pesoEstable,

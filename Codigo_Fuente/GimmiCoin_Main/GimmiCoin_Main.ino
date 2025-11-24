@@ -37,11 +37,14 @@ const int T_SONIDO     = 2000;
 const unsigned long PRE_MEASURE_DELAY_MS = 1000;
 const unsigned long SERVO_OPEN_SETTLE_MS = 300;
 const unsigned long SERVO_CLOSE_SETTLE_MS = 2000;
+constexpr unsigned long DEEP_SLEEP_SETTLE_MS = 250;  // Tiempo para que la web refleje el último estado
 
 // Valores monetarios por tipo de moneda identificado
-constexpr uint32_t COIN_VALUE_10  = 10;
-constexpr uint32_t COIN_VALUE_50  = 50;
-constexpr uint32_t COIN_VALUE_100 = 100;
+constexpr uint32_t COIN_VALUE_10   = 10;
+constexpr uint32_t COIN_VALUE_25   = 25;
+constexpr uint32_t COIN_VALUE_50   = 50;
+constexpr uint32_t COIN_VALUE_100  = 100;
+constexpr uint32_t COIN_VALUE_500  = 500;
 
 // Configuración de red y autenticación web
 const char* WIFI_AP_SSID     = "GimmiCoin";
@@ -56,7 +59,7 @@ constexpr uint16_t EEPROM_BYTES            = 16;
 constexpr int      EEPROM_ADDR_COUNTER     = 0;
 constexpr int      EEPROM_ADDR_MONEY       = EEPROM_ADDR_COUNTER + sizeof(uint32_t);
 constexpr uint8_t  EEPROM_WRITE_THRESHOLD  = 10;       // Guardar cada 10 monedas
-constexpr unsigned long EEPROM_WRITE_DELAY = 30000UL;  // O tras 30 s sin nuevas monedas
+constexpr unsigned long EEPROM_WRITE_DELAY = 15000UL;  // O tras 15 s sin nuevas monedas
 
 static uint32_t coinCounter = 0;           // Conteo total persistente
 static uint32_t lastPersistedCounter = 0;  // Último valor guardado en EEPROM
@@ -65,6 +68,9 @@ static bool     eepromDirty = false;       // Indica si hay datos pendientes
 static unsigned long lastCoinMillis = 0;   // Última moneda detectada
 static uint32_t moneyTotal = 0;            // Monto total acumulado en colones
 static uint32_t lastPersistedMoney = 0;    // Último monto guardado en EEPROM
+static bool pendingDeepSleep = false;      // Señala si debe entrar en deep sleep tras sincronizar
+static unsigned long deepSleepScheduledAt = 0;
+static bool deepSleepEngaged = false;      // Marca que ya se ejecutó la ruta de deep sleep
 bool webReady = false;
 
 // FSM principal que gobierna el flujo de la alcancía
@@ -82,7 +88,7 @@ struct StateContext {
   bool measurementStable = false;
   bool actuationDone = false;
   float lastWeight = 0.0F;
-  int lastCoinType = 0;
+  int lastCoinValue = 0;
   unsigned long stateSince = 0;
 };
 
@@ -93,7 +99,7 @@ void startWebServer(const char* ssid, const char* password);
 void pumpServer();
 void waitWithServer(unsigned long ms);
 void manageEepromCommit();
-void persistCounter(const char* reason);
+void persistCounter(const char* reason, bool dueToInactivity);
 uint32_t getCoinCounter();
 uint32_t getMoneyTotal();
 void resetCoinCounter();
@@ -102,7 +108,9 @@ void loadCounterFromEEPROM();
 const char* stateToString(SystemState state);
 void transitionTo(SystemState nextState);
 void processStateMachine();
-static uint32_t coinValueFromType(int coinType);
+void scheduleDeepSleep();
+void maybeEnterDeepSleep();
+void enterDeepSleepNow();
 
 // Declaraciones adelantadas de módulos hardware
 void sensorMoneda_setConteo(uint32_t value);
@@ -163,6 +171,12 @@ void setup() {
 
   transitionTo(SystemState::Idle);
 
+  pendingDeepSleep = false;
+  deepSleepScheduledAt = 0;
+  deepSleepEngaged = false;
+
+  lastCoinMillis = millis();
+
   Serial.println(F("[MAIN] Inicialización completa. Esperando monedas..."));
 }
 
@@ -184,6 +198,7 @@ void loop() {
   pumpServer();
   processStateMachine();
   manageEepromCommit();
+  maybeEnterDeepSleep();
   waitWithServer(5);
 }
 
@@ -252,15 +267,6 @@ const char* stateToString(SystemState state) {
   }
 }
 
-static uint32_t coinValueFromType(int coinType) {
-  switch (coinType) {
-    case 1: return COIN_VALUE_10;
-    case 2: return COIN_VALUE_50;
-    case 3: return COIN_VALUE_100;
-    default: return 0;
-  }
-}
-
 
 /* Function: transitionTo
    Cambia el estado actual de la FSM y registra la marca de tiempo del cambio.
@@ -295,17 +301,17 @@ void processStateMachine() {
   switch (fsmCtx.state) {
     case SystemState::Idle:
       if (sensorMoneda_hayNuevaMoneda()) {
-        coinCounter = sensorMoneda_getConteo();
-        coinsSincePersist = coinCounter - lastPersistedCounter;
-        eepromDirty = true;
         lastCoinMillis = millis();
+        pendingDeepSleep = false;
+        deepSleepScheduledAt = 0;
+        deepSleepEngaged = false;
 
         Serial.println();
-        Serial.print(F("[FSM] Moneda detectada. Conteo total = "));
+        Serial.print(F("[FSM] Moneda detectada. Conteo actual = "));
         Serial.println(coinCounter);
 
         fsmCtx.lastWeight = 0.0F;
-        fsmCtx.lastCoinType = 0;
+  fsmCtx.lastCoinValue = 0;
         fsmCtx.measurementDone = false;
         fsmCtx.measurementStable = false;
         fsmCtx.actuationDone = false;
@@ -321,22 +327,26 @@ void processStateMachine() {
 
       if (!fsmCtx.measurementDone) {
         Serial.println(F("[FSM] Iniciando medición de moneda."));
-        fsmCtx.measurementStable = balanza_medirMonedaEstable(fsmCtx.lastWeight, fsmCtx.lastCoinType);
+        fsmCtx.measurementStable = balanza_medirMonedaEstable(fsmCtx.lastWeight, fsmCtx.lastCoinValue);
         fsmCtx.measurementDone = true;
 
         Serial.print(F("[FSM] Peso medido = "));
         Serial.print(fsmCtx.lastWeight, 2);
         Serial.println(F(" g"));
 
-        Serial.print(F("[FSM] Tipo de moneda = "));
-        Serial.println(fsmCtx.lastCoinType);
+        if (fsmCtx.lastCoinValue > 0) {
+          Serial.print(F("[FSM] Valor detectado = ₡"));
+          Serial.println(fsmCtx.lastCoinValue);
+        } else {
+          Serial.println(F("[FSM] Valor detectado inválido."));
+        }
 
         if (!fsmCtx.measurementStable) {
           Serial.println(F("[FSM] Aviso: peso no totalmente estable (timeout)."));
         }
       }
 
-      if (fsmCtx.lastCoinType != 0) {
+      if (fsmCtx.lastCoinValue > 0) {
         transitionTo(SystemState::ActuateRecognized);
       } else {
         transitionTo(SystemState::ActuateUnrecognized);
@@ -345,32 +355,42 @@ void processStateMachine() {
 
     case SystemState::ActuateRecognized:
       if (!fsmCtx.actuationDone) {
-        Serial.print(F("[FSM] Actuando moneda reconocida (tipo "));
-        Serial.print(fsmCtx.lastCoinType);
+        Serial.print(F("[FSM] Actuando moneda reconocida (₡"));
+        Serial.print(fsmCtx.lastCoinValue);
         Serial.println(F(")"));
 
-        const uint32_t coinValue = coinValueFromType(fsmCtx.lastCoinType);
-        if (coinValue > 0) {
-          moneyTotal += coinValue;
-          eepromDirty = true;
+        const uint32_t coinValue = static_cast<uint32_t>(fsmCtx.lastCoinValue);
+        coinCounter += 1;
+        coinsSincePersist = coinCounter - lastPersistedCounter;
+        moneyTotal += coinValue;
+        eepromDirty = true;
+        lastCoinMillis = millis();
 
-          Serial.print(F("[FSM] Valor acreditado = ₡"));
-          Serial.println(coinValue);
-          Serial.print(F("[FSM] Total acumulado = ₡"));
-          Serial.println(moneyTotal);
-        }
+        Serial.print(F("[FSM] Conteo reconocido = "));
+        Serial.println(coinCounter);
+        Serial.print(F("[FSM] Valor acreditado = ₡"));
+        Serial.println(coinValue);
+        Serial.print(F("[FSM] Total acumulado = ₡"));
+        Serial.println(moneyTotal);
 
-        switch (fsmCtx.lastCoinType) {
-          case 1:
+        switch (coinValue) {
+          case COIN_VALUE_10:
             Serial.println(F("[FSM] Denominación: 10 colones"));
             break;
-          case 2:
+          case COIN_VALUE_25:
+            Serial.println(F("[FSM] Denominación: 25 colones"));
+            break;
+          case COIN_VALUE_50:
             Serial.println(F("[FSM] Denominación: 50 colones"));
             break;
-          case 3:
+          case COIN_VALUE_100:
             Serial.println(F("[FSM] Denominación: 100 colones"));
             break;
+          case COIN_VALUE_500:
+            Serial.println(F("[FSM] Denominación: 500 colones"));
+            break;
           default:
+            Serial.println(F("[FSM] Denominación: desconocida (valor reconocido)."));
             break;
         }
 
@@ -390,8 +410,7 @@ void processStateMachine() {
 
     case SystemState::ActuateUnrecognized:
       if (!fsmCtx.actuationDone) {
-        Serial.println(F("[FSM] Moneda no reconocida: activando solo el motor."));
-        motor_pulse();
+        Serial.println(F("[FSM] Peso inválido o moneda desconocida. Omitiendo accionamiento."));
         fsmCtx.actuationDone = true;
       }
 
@@ -403,8 +422,9 @@ void processStateMachine() {
       fsmCtx.measurementDone = false;
       fsmCtx.measurementStable = false;
       fsmCtx.actuationDone = false;
-      fsmCtx.lastCoinType = 0;
+      fsmCtx.lastCoinValue = 0;
       fsmCtx.lastWeight = 0.0F;
+      sensorMoneda_setConteo(coinCounter);
       transitionTo(SystemState::Idle);
       break;
   }
@@ -424,26 +444,39 @@ void processStateMachine() {
      Debe llamarse periódicamente desde el loop principal.
 */
 void manageEepromCommit() {
-  if (!eepromDirty) {
+  const unsigned long inactivity = millis() - lastCoinMillis;
+
+  if (deepSleepEngaged) {
     return;
   }
 
-  if (coinsSincePersist >= EEPROM_WRITE_THRESHOLD) {
-    persistCounter("conteo");
+  if (eepromDirty) {
+    if (coinsSincePersist >= EEPROM_WRITE_THRESHOLD) {
+      persistCounter("conteo", false);
+      return;
+    }
+
+    if (inactivity >= EEPROM_WRITE_DELAY) {
+      persistCounter("timeout", true);
+    }
     return;
   }
 
-  if (millis() - lastCoinMillis >= EEPROM_WRITE_DELAY) {
-    persistCounter("timeout");
+  if (!pendingDeepSleep && inactivity >= EEPROM_WRITE_DELAY) {
+    Serial.println(F("[MAIN] Inactividad prolongada sin cambios. Programando deep sleep."));
+    scheduleDeepSleep();
   }
 }
 
 
 /* Function: persistCounter
-   Escribe el contador de monedas en la EEPROM y limpia los indicadores.
+   Escribe el contador de monedas en la EEPROM y limpia los indicadores. Puede
+   opcionalmente programar la entrada a deep sleep cuando la sincronización se
+   produjo por inactividad.
 
    Params:
      - reason: const char* - texto que describe el motivo del guardado.
+     - dueToInactivity: bool - true si se invoca por timeout de inactividad.
 
    Returns:
      - void - no retorna valor.
@@ -451,7 +484,7 @@ void manageEepromCommit() {
    Restriction:
      Debe invocarse solo cuando eepromDirty es verdadero.
 */
-void persistCounter(const char* reason) {
+void persistCounter(const char* reason, bool dueToInactivity) {
   const uint32_t counterValue = getCoinCounter();
   const uint32_t moneyValue   = getMoneyTotal();
 
@@ -470,6 +503,10 @@ void persistCounter(const char* reason) {
   Serial.println(counterValue);
   Serial.print(F("[EEPROM] Dinero acumulado = ₡"));
   Serial.println(moneyValue);
+
+  if (dueToInactivity) {
+    scheduleDeepSleep();
+  }
 }
 
 
@@ -511,9 +548,12 @@ void resetCoinCounter() {
   moneyTotal = 0;
   lastPersistedMoney = 0;
   eepromDirty = false;
+  pendingDeepSleep = false;
+  deepSleepScheduledAt = 0;
   EEPROM.put(EEPROM_ADDR_COUNTER, static_cast<uint32_t>(0));
   EEPROM.put(EEPROM_ADDR_MONEY, static_cast<uint32_t>(0));
   EEPROM.commit();
+  lastCoinMillis = millis();
   Serial.println(F("[MAIN] Contador reseteado desde web."));
 }
 
@@ -554,16 +594,70 @@ void loadCounterFromEEPROM() {
   lastPersistedCounter = stored;
   Serial.print(F("[EEPROM] Conteo restaurado = "));
   Serial.println(coinCounter);
-    coinsSincePersist = 0;
+  coinsSincePersist = 0;
 
-    uint32_t storedMoney = 0;
-    EEPROM.get(EEPROM_ADDR_MONEY, storedMoney);
-    if (storedMoney == 0xFFFFFFFF) {
-      storedMoney = 0;
-    }
-    moneyTotal = storedMoney;
-    lastPersistedMoney = storedMoney;
+  uint32_t storedMoney = 0;
+  EEPROM.get(EEPROM_ADDR_MONEY, storedMoney);
+  if (storedMoney == 0xFFFFFFFF) {
+    storedMoney = 0;
+  }
+  moneyTotal = storedMoney;
+  lastPersistedMoney = storedMoney;
 
-    Serial.print(F("[EEPROM] Dinero restaurado = ₡"));
-    Serial.println(moneyTotal);
+  Serial.print(F("[EEPROM] Dinero restaurado = ₡"));
+  Serial.println(moneyTotal);
+}
+
+
+void scheduleDeepSleep() {
+  if (deepSleepEngaged || pendingDeepSleep) {
+    return;
+  }
+  pendingDeepSleep = true;
+  deepSleepScheduledAt = millis();
+  Serial.println(F("[POWER] Deep sleep programado tras inactividad."));
+}
+
+
+void maybeEnterDeepSleep() {
+  if (deepSleepEngaged) {
+    return;
+  }
+
+  if (!pendingDeepSleep) {
+    return;
+  }
+
+  pumpServer();
+
+  if (millis() - deepSleepScheduledAt < DEEP_SLEEP_SETTLE_MS) {
+    return;
+  }
+
+  enterDeepSleepNow();
+}
+
+
+void enterDeepSleepNow() {
+  if (deepSleepEngaged) {
+    return;
+  }
+
+  Serial.println(F("[POWER] Entrando en deep sleep. Esperando nueva interrupción."));
+  pendingDeepSleep = false;
+  deepSleepScheduledAt = 0;
+  deepSleepEngaged = true;
+
+#if GM_USING_ARDUINO_CORE
+#if defined(ARDUINO_ARCH_ESP8266)
+  WiFi.forceSleepBegin();
+  delay(1);
+  ESP.deepSleep(0);
+#else
+  delay(50);
+  ESP.deepSleep(0);
+#endif
+#else
+  Serial.println(F("[POWER] Deep sleep simulado (entorno de desarrollo)."));
+#endif
 }
