@@ -1,5 +1,13 @@
+#if defined(__INTELLISENSE__)
+#undef ARDUINO
+#endif
+
+#if defined(ARDUINO)
 #include <SoftwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
+#else
+#include "dfplayer_stub.h"
+#endif
 
 // asume que en GimmiCoin_Main.ino ya definiste:
 // #define PIN_DF_RX  D4

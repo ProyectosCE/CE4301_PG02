@@ -1,8 +1,13 @@
-#include <Arduino.h>
+#if !defined(__XTENSA__)
+#undef ARDUINO
+#undef GM_USING_ARDUINO_CORE
+#define GM_USING_ARDUINO_CORE 0
+#endif
+#include "arduino_compat.h"
 
-#if __has_include(<ESP8266WiFi.h>)
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#if GM_USING_ARDUINO_CORE
+#include "ESP8266WiFi.h"
+#include "ESP8266WebServer.h"
 #else
 #include "esp8266_stubs.h"
 #endif

@@ -1,4 +1,12 @@
+#if defined(__INTELLISENSE__)
+#undef ARDUINO
+#endif
+
+#if defined(ARDUINO)
 #include <Servo.h>
+#else
+#include "servo_stub.h"
+#endif
 
 Servo servoMotor;
 

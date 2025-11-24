@@ -1,10 +1,6 @@
 #pragma once
 
-#if __has_include(<Arduino.h>)
-#include <Arduino.h>
-#else
 #include "arduino_stub.h"
-#endif
 
 class ESP8266WebServer {
  public:

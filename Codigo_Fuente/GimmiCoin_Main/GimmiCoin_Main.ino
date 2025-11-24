@@ -1,23 +1,28 @@
-#if __has_include(<Arduino.h>)
+#if defined(__INTELLISENSE__)
+#undef ARDUINO
+#endif
+
+#if defined(ARDUINO)
 #include <Arduino.h>
 #else
 #include "arduino_stub.h"
 #endif
 
-#if __has_include(<ESP8266WiFi.h>)
+#if defined(ARDUINO)
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #else
 #include "esp8266_stubs.h"
 #endif
 
-#if __has_include(<EEPROM.h>)
+#if defined(ARDUINO)
 #include <EEPROM.h>
 #else
 #include "eeprom_stub.h"
 #endif
 
 #define PIN_SENSOR_MONEDA   D2     // Sensor de moneda (pull-down externo)
+#define PIN_SERVO           D1     // Servo SG92R
 #define PIN_MOTOR           D8     // Motor DC (transistor)
 
 #define PIN_DF_RX           D4     // DFPlayer: RX del ESP
@@ -29,6 +34,9 @@
 
 // Duraciones principales
 const int T_SONIDO     = 2000;
+const unsigned long PRE_MEASURE_DELAY_MS = 1000;
+const unsigned long SERVO_OPEN_SETTLE_MS = 300;
+const unsigned long SERVO_CLOSE_SETTLE_MS = 2000;
 
 // Configuración de red y autenticación web
 const char* WIFI_AP_SSID     = "GimmiCoin";
@@ -51,6 +59,27 @@ static bool     eepromDirty = false;       // Indica si hay datos pendientes
 static unsigned long lastCoinMillis = 0;   // Última moneda detectada
 bool webReady = false;
 
+// FSM principal que gobierna el flujo de la alcancía
+enum class SystemState : uint8_t {
+  Idle,
+  MeasureCoin,
+  ActuateRecognized,
+  ActuateUnrecognized,
+  Finalize
+};
+
+struct StateContext {
+  SystemState state = SystemState::Idle;
+  bool measurementDone = false;
+  bool measurementStable = false;
+  bool actuationDone = false;
+  float lastWeight = 0.0F;
+  int lastCoinType = 0;
+  unsigned long stateSince = 0;
+};
+
+static StateContext fsmCtx;
+
 // Declaraciones adelantadas para utilitarios web/persistencia
 void startWebServer(const char* ssid, const char* password);
 void pumpServer();
@@ -61,6 +90,9 @@ uint32_t getCoinCounter();
 void resetCoinCounter();
 bool isCoinSensorActive();
 void loadCounterFromEEPROM();
+const char* stateToString(SystemState state);
+void transitionTo(SystemState nextState);
+void processStateMachine();
 
 // Declaraciones adelantadas de módulos hardware
 void sensorMoneda_setConteo(uint32_t value);
@@ -73,6 +105,11 @@ uint32_t sensorMoneda_getConteo();
 // Motor 
 void motor_init();
 void motor_pulse();
+
+// Servo
+void servo_init();
+void servo_irAAbierto();
+void servo_irACerrado();
 
 // Sonido
 void sonido_init();
@@ -107,11 +144,14 @@ void setup() {
 
   sensorMoneda_init();
   sensorMoneda_setConteo(coinCounter);
+  servo_init();
   motor_init();
   sonido_init();
   balanza_init(PIN_BALANZA_DOUT, PIN_BALANZA_SCK);
 
   startWebServer(WIFI_AP_SSID, WIFI_AP_PASSWORD);
+
+  transitionTo(SystemState::Idle);
 
   Serial.println(F("[MAIN] Inicialización completa. Esperando monedas..."));
 }
@@ -132,67 +172,9 @@ void setup() {
 */
 void loop() {
   pumpServer();
+  processStateMachine();
   manageEepromCommit();
-
-  // Si se detecta una moneda física por el sensor
-  if (sensorMoneda_hayNuevaMoneda()) {
-
-    coinCounter = sensorMoneda_getConteo();
-    coinsSincePersist = coinCounter - lastPersistedCounter;
-    eepromDirty = true;
-    lastCoinMillis = millis();
-
-    Serial.println();
-    Serial.print(F("[MAIN] Nueva moneda detectada. Conteo total = "));
-    Serial.println(coinCounter);
-
-    waitWithServer(1000);
-    // MEDICIÓN CON ESTABILIDAD
-
-    float peso = 0.0;
-    int tipo  = 0;
-
-    bool estable = balanza_medirMonedaEstable(peso, tipo);
-
-    Serial.print(F("[MAIN] Peso estable medido = "));
-    Serial.print(peso, 2);
-    Serial.println(F(" g"));
-
-    Serial.print(F("[MAIN] Tipo moneda detectada = "));
-    Serial.println(tipo);
-
-    if (!estable) {
-      Serial.println(F("[MAIN] ADVERTENCIA: Peso NO fue completamente estable (timeout)."));
-    }
-
-    // ACCIONES SEGÚN TIPO DE MONEDA
-
-    if (tipo != 0) {
-      // Moneda reconocida (10, 50 o 100 colones)
-
-      switch (tipo) {
-        case 1: Serial.println(F("[MAIN] Moneda reconocida: 10 colones"));  break;
-        case 2: Serial.println(F("[MAIN] Moneda reconocida: 50 colones"));  break;
-        case 3: Serial.println(F("[MAIN] Moneda reconocida: 100 colones")); break;
-      }
-
-      // Reproducir audio 
-      sonido_reproMoneda();
-      waitWithServer(T_SONIDO);
-
-      //Motor para retirar la moneda
-      motor_pulse();
-      pumpServer();
-
-    } else {
-      // Moneda NO reconocida
-      Serial.println(F("[MAIN] Moneda NO reconocida. Solo se activa el motor."));
-      motor_pulse();
-      pumpServer();
-    }
-  }
-
-  waitWithServer(10);  // pequeño respiro con atención al servidor
+  waitWithServer(5);
 }
 
 
@@ -236,6 +218,165 @@ void waitWithServer(unsigned long ms) {
   while (millis() - inicio < ms) {
     pumpServer();
     delay(5);
+  }
+}
+
+
+/* Function: stateToString
+   Devuelve el nombre simbólico de un estado de la FSM para fines de depuración.
+
+   Params:
+     - state: SystemState - estado actual o destino que se desea describir.
+
+   Returns:
+     - const char* - cadena literal con la etiqueta del estado.
+*/
+const char* stateToString(SystemState state) {
+  switch (state) {
+    case SystemState::Idle:                return "IDLE";
+    case SystemState::MeasureCoin:         return "MEASURE";
+    case SystemState::ActuateRecognized:   return "ACTUATE_RECOGNIZED";
+    case SystemState::ActuateUnrecognized: return "ACTUATE_UNRECOGNIZED";
+    case SystemState::Finalize:            return "FINALIZE";
+    default:                               return "UNKNOWN";
+  }
+}
+
+
+/* Function: transitionTo
+   Cambia el estado actual de la FSM y registra la marca de tiempo del cambio.
+
+   Params:
+     - nextState: SystemState - estado objetivo al que se desea transicionar.
+
+   Returns:
+     - void - no retorna valor.
+*/
+void transitionTo(SystemState nextState) {
+  fsmCtx.state = nextState;
+  fsmCtx.stateSince = millis();
+  Serial.print(F("[FSM] -> "));
+  Serial.println(stateToString(nextState));
+}
+
+
+/* Function: processStateMachine
+   Ejecuta un ciclo de la máquina de estados finita que modela la alcancía.
+
+   Params:
+     - Ninguno.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Debe llamarse con alta frecuencia para mantener la respuesta del sistema.
+*/
+void processStateMachine() {
+  switch (fsmCtx.state) {
+    case SystemState::Idle:
+      if (sensorMoneda_hayNuevaMoneda()) {
+        coinCounter = sensorMoneda_getConteo();
+        coinsSincePersist = coinCounter - lastPersistedCounter;
+        eepromDirty = true;
+        lastCoinMillis = millis();
+
+        Serial.println();
+        Serial.print(F("[FSM] Moneda detectada. Conteo total = "));
+        Serial.println(coinCounter);
+
+        fsmCtx.lastWeight = 0.0F;
+        fsmCtx.lastCoinType = 0;
+        fsmCtx.measurementDone = false;
+        fsmCtx.measurementStable = false;
+        fsmCtx.actuationDone = false;
+
+        transitionTo(SystemState::MeasureCoin);
+      }
+      break;
+
+    case SystemState::MeasureCoin:
+      if (millis() - fsmCtx.stateSince < PRE_MEASURE_DELAY_MS) {
+        return;
+      }
+
+      if (!fsmCtx.measurementDone) {
+        Serial.println(F("[FSM] Iniciando medición de moneda."));
+        fsmCtx.measurementStable = balanza_medirMonedaEstable(fsmCtx.lastWeight, fsmCtx.lastCoinType);
+        fsmCtx.measurementDone = true;
+
+        Serial.print(F("[FSM] Peso medido = "));
+        Serial.print(fsmCtx.lastWeight, 2);
+        Serial.println(F(" g"));
+
+        Serial.print(F("[FSM] Tipo de moneda = "));
+        Serial.println(fsmCtx.lastCoinType);
+
+        if (!fsmCtx.measurementStable) {
+          Serial.println(F("[FSM] Aviso: peso no totalmente estable (timeout)."));
+        }
+      }
+
+      if (fsmCtx.lastCoinType != 0) {
+        transitionTo(SystemState::ActuateRecognized);
+      } else {
+        transitionTo(SystemState::ActuateUnrecognized);
+      }
+      break;
+
+    case SystemState::ActuateRecognized:
+      if (!fsmCtx.actuationDone) {
+        Serial.print(F("[FSM] Actuando moneda reconocida (tipo "));
+        Serial.print(fsmCtx.lastCoinType);
+        Serial.println(F(")"));
+
+        switch (fsmCtx.lastCoinType) {
+          case 1:
+            Serial.println(F("[FSM] Denominación: 10 colones"));
+            break;
+          case 2:
+            Serial.println(F("[FSM] Denominación: 50 colones"));
+            break;
+          case 3:
+            Serial.println(F("[FSM] Denominación: 100 colones"));
+            break;
+          default:
+            break;
+        }
+
+        sonido_reproMoneda();
+        waitWithServer(T_SONIDO);
+        servo_irAAbierto();
+        waitWithServer(SERVO_OPEN_SETTLE_MS);
+        servo_irACerrado();
+        waitWithServer(SERVO_CLOSE_SETTLE_MS);
+        motor_pulse();
+
+        fsmCtx.actuationDone = true;
+      }
+
+      transitionTo(SystemState::Finalize);
+      break;
+
+    case SystemState::ActuateUnrecognized:
+      if (!fsmCtx.actuationDone) {
+        Serial.println(F("[FSM] Moneda no reconocida: activando solo el motor."));
+        motor_pulse();
+        fsmCtx.actuationDone = true;
+      }
+
+      transitionTo(SystemState::Finalize);
+      break;
+
+    case SystemState::Finalize:
+      Serial.println(F("[FSM] Ciclo de moneda completado."));
+      fsmCtx.measurementDone = false;
+      fsmCtx.measurementStable = false;
+      fsmCtx.actuationDone = false;
+      fsmCtx.lastCoinType = 0;
+      fsmCtx.lastWeight = 0.0F;
+      transitionTo(SystemState::Idle);
+      break;
   }
 }
 
