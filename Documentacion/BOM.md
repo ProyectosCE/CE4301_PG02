@@ -1,101 +1,73 @@
-# Bill of Materials (BOM)
-
-**Proyecto:** Gimmighoul Coin Collector Robot  
-**Curso:** CE4301 – Arquitectura de Computadores I  
-**Instituto Tecnológico de Costa Rica**
-**Fecha:** Noviembre 2025  
-
-> **Base:** Alternativa B (versión con Mini D1 Wemos ESP8266, pesaje por celda de carga, sensor IR de presencia, audio con DFPlayer).  
-> **Tipo de cambio de referencia (31/10/2025):** 1 USD = **₡502.01**
+# Bill of Materials (BOM) – Proyecto GimmiCoin  
 
 ---
 
-## 1) Microcontrolador
+## 1. Introducción
 
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|---|---|---|---|---:|
-| **Mini D1 Wemos ESP8266** | MCU principal: coordina lectura HX711, sensor IR, control de servos, audio y WiFi con la app. | Wi-Fi 2.4 GHz, 3.3 V lógico, UART / I²C / “SPI” (HX711 2-wire), USB para programación. | **Propio del equipo** | **0.00** |
+El siguiente documento detalla la **lista de materiales** utilizados en la construcción del robot ―alcancía inteligente― **GimmiCoin**, correspondiente al diseño actualizado del sistema:
 
----
+- Microcontrolador ESP8266 (D1 Mini)
+- Sensor de contacto
+- Celda de carga TAL221 + HX711
+- Motor DC + etapa de potencia 2N2222 + diodo flyback
+- DFPlayer Mini + parlante
+- Webserver embebido
+- Powerbank 5V
+- Montaje final en **tarjeta perforada**
 
-## 2) Sensores
-
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|---|---|---|---|---:|
-| **Load Cell TAL221 (100 g Mini Straight Bar)** | Medición de peso de la moneda para inferir su denominación. | Capacidad 100 g, aluminio, puente Wheatstone 4 hilos. | MicroJPM | **16.95** |
-| **HX711 Load Cell Amplifier** | ADC 24-bit y amplificador para la celda; interfaz digital 2 hilos (DT, SCK). | 2.7–5 V, 10/80 SPS, bajo ruido. | CRCibernética | **8.95** |
-
----
-
-## 3) Actuadores
-
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|---|---|---|---|---:|
-| **Servo Motor SG90 (x2)** | (1) Levanta la tapa del cofre; (2) empuja/limpia la moneda tras el pesaje. | 5 V, 180°, torque aprox. 1.8 kg·cm. | MicroJPM | **5.95 × 2 = 11.90** |
+Todos los precios están actualizados a colones costarricenses (CRC).
 
 ---
 
-## 4) Audio
+## 2. Lista de materiales completa
 
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|---|---|---|---|---:|
-| **DFPlayer Mini (Módulo MP3)** | Reproduce efecto sonoro al registrar moneda (control por UART). | Soporta FAT16/32, salida SPK directa, 24-bit DAC. | CRCibernética | **4.95** |
-| **Parlante 8 Ω / 0.5 W** | Salida de audio directa del DFPlayer. | Ø ~57 mm, SPL ~92 dB, 120 Hz–12 kHz. | MicroJPM | **3.95** |
-
----
-
-## 5) Alimentación y Regulación
-
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Proveedor / Enlace** | **Costo (USD)** |
-|---|---|---|---|---:|
-| **Li-Ion Polymer 3.7 V / 2000 mAh** | Batería principal recargable del sistema. | 3.7 V nominal, protección integrada. | CRCibernética | **14.95** |
-| **TP4056 1A Charger Module (Mini-B)** | Cargador Li-Ion 1 A sin protección (carga/descarga). | Entrada Mini-B| Microjpm | **4.50** |
-| **MT3608 DC-DC Boost** | Eleva 3.7 V → 5 V (servos + DFPlayer). | 2–24 V in, ~5–28 V out, hasta 1 A recomendado. | CRCibernética | **2.49** |
-| **LM2596 DC-DC Buck** | Reduce 5 V → 3.3 V (ESP8266 + HX711). | 4.5–40 V in, 1.25–35 V out, 3 A máx. | CRCibernética | **4.95** |
-
----
-
-## 6) Comunicación / Detección de presencia
-
-| **Componente** | **Descripción / Función** | **Especificaciones clave** | **Costo (USD)** |
-|---|---|---|---:|
-| **Sensor IR de presencia (TCRT5000)** | Señal digital para “moneda detectada” antes del pesaje. | Detección de objetos cercanos (0.2 a 2.5 mm) | **1.60** |
+| # | Componente | Cantidad | Precio unitario (USD) | Precio unitario (CRC) | Proveedor | Notas |
+|---|------------|----------|------------------------|------------------------|-----------|--------|
+| 1 | D1 Mini ESP8266 | 1 | $3.90 | ₡2 000 | AliExpress | Control principal |
+| 2 | Celda de carga TAL221 (100g) | 1 | $3.50 | ₡1 800 | AliExpress | Sensor de pesaje |
+| 3 | Módulo HX711 | 1 | $1.20 | ₡650 | AliExpress | ADC 24 bits para balanza |
+| 4 | Motor DC 3–6V | 1 | $1.00 | ₡520 | Electrónica Kapro | Actuador para limpieza |
+| 5 | Transistor 2N2222 | 1 | $0.10 | ₡50 | Electrónica Kapro | Etapa de potencia |
+| 6 | Diodo flyback 1N4148 o 1N4007 | 1 | $0.05 | ₡30 | Electrónica Kapro | Protección del motor |
+| 7 | Resistencia 10 kΩ (sensor contacto) | 1 | $0.05 | ₡30 | Electrónica Kapro | Pull-down |
+| 8 | Resistencia 1 kΩ (DFPlayer RX) | 1 | $0.05 | ₡30 | Electrónica Kapro | Protección UART |
+| 9 | DFPlayer Mini | 1 | $2.50 | ₡1 300 | AliExpress | Sonido del Gimmighoul |
+| 10 | Parlante 8Ω 0.5W | 1 | $1.00 | ₡520 | AliExpress | Salida de audio |
+| 11 | Powerbank 5V 2000–5000 mAh | 1 | $5.00 | ₡2 600 | Walmart / Electrónica | Fuente de energía |
+| 12 | Tarjeta perforada | 1 | $1.00 | ₡520 | Electrónica Kapro | Montaje final obligatorio |
+| 13 | Cables Dupont / cable sólido | 20 | $0.05 | ₡30 c/u | Electrónica Kapro | Conexiones |
+| 14 | Protuberancias / separadores plásticos | 4 | $0.10 | ₡50 | Electrónica Kapro | Aislamiento mecánico |
+| 15 | Tornillería M3 / tuercas | 6 | $0.10 | ₡50 | Ferretería | Fijación de celda/motor |
+| 16 | Cinta doble adhesiva 3M | 1 | $1.00 | ₡520 | Oficentro | Montaje mecánico |
+| 17 | Caja / estructura Gimmighoul (impresión 3D o manual) | 1 | $4.00 | ₡2 000 | Local / impresión | Envoltura física |
 
 ---
 
-## 7) 3D e Insumos (variables)
+## 3. Costos totales
 
-| **Concepto** | **Descripción / Observación** | **Costo** |
-|---|---|---:|
-| **Impresión 3D del cuerpo (Gimmighoul + guías)** | Laimi: **₡50 por gramo**. El costo final depende del peso total impreso. | **₡ 50 × (gramos)** |
-| **Consumibles de conexión** | Cables, headers, tornillería ligera. | — |
+### 3.1 Total en USD  
+Suma de todos los componentes:
 
----
+**≈ $29.00**
 
-## 8) Resumen de Costos (según anteproyecto)
+### 3.2 Total en CRC  
+Conversión usando **₡520 por dólar**:
 
-| **Categoría** | **Subtotal (USD)** |
-|---|---:|
-| Sensores (TAL221 + HX711) | **16.95 + 8.95 = 25.90** |
-| Actuadores (2× SG90) | **11.90** |
-| Audio (DFPlayer + parlante) | **4.95 + 3.95 = 8.90** |
-| Alimentación y regulación (batería + TP4056 + MT3608 + LM2596) | **14.95 + 4.95 + 2.49 + 4.95 = 27.34** |
-| Microcontrolador (Mini D1 Wemos ESP8266) | **0.00** |
-| **Total Aproximado (sin impresión 3D)** | **$74.04** |
+**≈ ₡15 080**
 
-**Total en colones (ref. ₡502.01 / USD):** **₡37 168.82**  
-**Impresión 3D (variable):** **₡50 × (gramos)** → *se suma al total en CRC cuando se defina el peso final.*
+(El valor puede variar levemente según proveedor y stock.)
 
 ---
 
-## 9) Observaciones técnicas
+## 4. Notas importantes
 
-- **Comunicación digital principal:** HX711 (2-wire: DT/SCK) entre celda de carga y ESP8266.  
-- **Comunicación secundaria:** UART entre ESP8266 y DFPlayer Mini para audio.  
-- **Líneas de alimentación recomendadas:**  
-  - Batería 3.7 V → **TP4056** (carga).  
-  - Batería 3.7 V → **MT3608** (boost a 5 V: servos + DFPlayer).  
-  - **LM2596** (buck de 5 V a **3.3 V** para ESP8266 + HX711).  
-- Añadir **desacoplos** en potencia: ≥470–1000 µF en 5 V (picos de los SG90) y 100–220 µF en 3.3 V.  
-- **GND común** para todos los módulos.  
-- El **sensor IR** solo triggea el flujo; la **validación de moneda** se realiza por **peso** (mayor confiabilidad).
+1. **No se usan servos ni sensores IR**, por lo que fueron removidos del BOM original.  
+2. El sistema utiliza **solo un motor DC**, mediante un transistor en modo conmutación.  
+3. La alimentación se simplifica notablemente con el uso de una **powerbank**, eliminando cargadores LiPo, boost, buck y baterías Li-ion.  
+4. El BOM incluye componentes indispensables no considerados originalmente:  
+   - resistencias  
+   - diodo flyback  
+   - tarjeta perforada  
+5. La estructura física puede imprimirse en 3D o construirse manualmente.  
+
+---
