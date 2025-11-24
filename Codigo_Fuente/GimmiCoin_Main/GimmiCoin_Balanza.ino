@@ -33,6 +33,19 @@ const float BAL_MAX_100  = 12.00;
 
 // Debe llamarse una sola vez desde setup(), con los pines DOUT y SCK:
 //   balanza_init(PIN_BALANZA_DOUT, PIN_BALANZA_SCK);
+/* Function: balanza_init
+   Inicializa el módulo HX711 y realiza la tara y factor de escala.
+
+   Params:
+     - pin_dout: int - pin digital conectado a la salida de datos del HX711.
+     - pin_sck: int - pin digital conectado al reloj del HX711.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Debe invocarse con la balanza sin carga para calibrar correctamente.
+*/
 void balanza_init(int pin_dout, int pin_sck) {
   balanza.begin(pin_dout, pin_sck);
 
@@ -52,6 +65,15 @@ void balanza_init(int pin_dout, int pin_sck) {
 }
 
 
+/* Function: balanza_leerGramos
+   Obtiene una lectura rápida de la balanza expresada en gramos.
+
+   Params:
+     - Ninguno.
+
+   Returns:
+     - float - peso estimado en gramos.
+*/
 float balanza_leerGramos() {
   if (!balanza.is_ready()) {
     return 0.0;
@@ -67,6 +89,15 @@ float balanza_leerGramos() {
 //   1 -> 10 colones
 //   2 -> 50 colones
 //   3 -> 100 colones
+/* Function: balanza_clasificarMoneda
+   Determina el tipo de moneda a partir del peso medido.
+
+   Params:
+     - gramos: float - peso de la moneda en gramos.
+
+   Returns:
+     - int - código asignado a la denominación (0 sin coincidencia).
+*/
 int balanza_clasificarMoneda(float gramos) {
   float peso = gramos;
 
@@ -112,6 +143,19 @@ int balanza_clasificarMoneda(float gramos) {
 //       - Devuelve false,
 //       - Devuelve igualmente el último peso medido en pesoEstable,
 //       - Clasifica igual (por si quieres tomar una decisión basada en eso).
+/* Function: balanza_medirMonedaEstable
+   Realiza lecturas sucesivas hasta obtener un peso estable para clasificar la moneda.
+
+   Params:
+     - pesoEstable: float& - referencia donde se almacena el peso final estimado.
+     - tipoMoneda: int& - referencia para el código de la moneda detectada.
+
+   Returns:
+     - bool - true si se alcanzó la estabilidad dentro del tiempo límite.
+
+   Restriction:
+     Su ejecución es bloqueante y no debe interrumpirse mientras se mide.
+*/
 bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda) {
   // Asegurarse de que el HX711 responde
   unsigned long inicioEspera = millis();

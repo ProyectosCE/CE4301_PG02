@@ -29,6 +29,19 @@ const uint8_t SONIDO_MAX_INTENTOS_INIT = 5;
 
 // Función interna para imprimir detalles del DFPlayer
 
+/* Function: sonido_printDetail
+   Imprime información de depuración proveniente del DFPlayer Mini.
+
+   Params:
+     - type: uint8_t - código del evento reportado por el módulo.
+     - value: int - dato adicional asociado al evento.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Solo se usa en contexto de depuración y mensajes serie.
+*/
 static void sonido_printDetail(uint8_t type, int value) {
   switch (type) {
     case TimeOut:
@@ -71,6 +84,18 @@ static void sonido_printDetail(uint8_t type, int value) {
 
 // Inicialización del módulo de sonido
 
+/* Function: sonido_init
+   Inicializa el DFPlayer Mini con reintentos y configura sus parámetros básicos.
+
+   Params:
+     - Ninguno.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Requiere que Serial esté inicializado y la tarjeta SD presente.
+*/
 void sonido_init() {
   // Requerimos que Serial ya esté inicializado en el main para ver mensajes.
   Serial.println();
@@ -119,6 +144,18 @@ void sonido_init() {
 
 // Reproducir sonido asociado a la moneda
 
+/* Function: sonido_reproMoneda
+   Solicita al DFPlayer la reproducción del audio asociado al depósito de una moneda.
+
+   Params:
+     - Ninguno.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Se recomienda verificar que el DFPlayer esté inicializado correctamente antes de llamar.
+*/
 void sonido_reproMoneda() {
   // Si ya hubo un error fatal, no intentamos nada más
   if (sonido_error_fatal) {
