@@ -1,3 +1,4 @@
+// calibracion2.ino
 #if defined(__INTELLISENSE__)
 #undef ARDUINO
 #endif
@@ -34,7 +35,7 @@
 
 // Duraciones principales
 const int T_SONIDO     = 2000;
-const unsigned long PRE_MEASURE_DELAY_MS = 0;    // Sin demora para respuesta inmediata
+const unsigned long PRE_MEASURE_DELAY_MS = 6000;  // 6 segundos para que deje de vibrar tras detección
 const unsigned long SERVO_OPEN_SETTLE_MS = 200;  // Reducido
 const unsigned long SERVO_CLOSE_SETTLE_MS = 500; // Reducido para no demorar
 constexpr unsigned long DEEP_SLEEP_SETTLE_MS = 250;  // Tiempo para que la web refleje el último estado
@@ -90,12 +91,17 @@ struct StateContext {
   int lastCoinValue = 0;
   unsigned long stateSince = 0;
   bool isActuating = false;  // Flag para evitar actualizar web durante actuación
+  bool stabilizationMessageShown = false;  // Flag para mostrar mensaje de estabilización una vez
 };
 
 static StateContext fsmCtx;
 
 // Declaraciones adelantadas para utilitarios web/persistencia
 void startWebServer(const char* ssid, const char* password);
+void handleRoot();
+void handleGetStatus();
+void handlePostReset();
+void handleNotFound();
 void pumpServer();
 void waitWithServer(unsigned long ms);
 void manageEepromCommit();
@@ -140,7 +146,6 @@ void sonido_reproMoneda();
 // Balanza
 void balanza_init(int pin_dout, int pin_sck);
 bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda);
-
 
 /* Function: setup
    Configura el hardware, restaura el contador persistente e inicia el servidor web.
@@ -340,21 +345,30 @@ void processStateMachine() {
         fsmCtx.measurementDone = false;
         fsmCtx.measurementStable = false;
         fsmCtx.actuationDone = false;
+        fsmCtx.stabilizationMessageShown = false;  // Reiniciar flag de mensaje
 
         transitionTo(SystemState::MeasureCoin);
       }
       break;
 
     case SystemState::MeasureCoin:
-      // Medición inmediata sin demoras
+      // Esperar 3 segundos tras detección para que deje de vibrar
+      if (millis() - fsmCtx.stateSince < PRE_MEASURE_DELAY_MS) {
+        // Mostrar mensaje de estabilización una sola vez
+        if (!fsmCtx.stabilizationMessageShown) {
+          Serial.println(F("[FSM] Esperando 3 segundos para estabilización de vibraciones..."));
+          fsmCtx.stabilizationMessageShown = true;
+        }
+        return; // Aún en período de espera
+      }
+
       if (!fsmCtx.measurementDone) {
-        Serial.println(F("[FSM] Iniciando medición de moneda."));
+        Serial.println(F("[FSM] Iniciando medición de moneda tras estabilización."));
         fsmCtx.measurementStable = balanza_medirMonedaEstable(fsmCtx.lastWeight, fsmCtx.lastCoinValue);
         fsmCtx.measurementDone = true;
 
-        Serial.print(F("[FSM] Peso medido = "));
-        Serial.print(fsmCtx.lastWeight, 2);
-        Serial.println(F(" g"));
+  Serial.print(F("[FSM] Unidades HX711 estabilizadas = "));
+  Serial.println(static_cast<long>(fsmCtx.lastWeight));
 
         if (fsmCtx.lastCoinValue > 0) {
           Serial.print(F("[FSM] Valor detectado = ₡"));
@@ -477,6 +491,7 @@ void processStateMachine() {
       fsmCtx.lastCoinValue = 0;
       fsmCtx.lastWeight = 0.0F;
       fsmCtx.isActuating = false;  // Asegurar que no quede marcado
+      fsmCtx.stabilizationMessageShown = false;  // Limpiar flag de mensaje
       sensorMoneda_setConteo(coinCounter);
       transitionTo(SystemState::Idle);
       break;
@@ -714,4 +729,147 @@ void enterDeepSleepNow() {
 #else
   Serial.println(F("[POWER] Deep sleep simulado (entorno de desarrollo)."));
 #endif
+}
+
+
+// =====================================================================================
+// MÓDULO WEB - Implementación del servidor web
+// =====================================================================================
+
+/* Function: startWebServer
+   Configura e inicia el servidor web en modo punto de acceso.
+
+   Params:
+     - ssid: const char* - nombre de la red Wi-Fi a crear.
+     - password: const char* - contraseña de la red Wi-Fi.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Debe llamarse después de la inicialización de los módulos hardware.
+*/
+void startWebServer(const char* ssid, const char* password) {
+#if defined(ARDUINO)
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, password);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print(F("[WEB] Punto de acceso iniciado. IP: "));
+  Serial.println(IP);
+
+  // Configurar rutas del servidor
+  server.on("/", handleRoot);
+  server.on("/status", HTTP_GET, handleGetStatus);
+  server.on("/reset", HTTP_POST, handlePostReset);
+  server.onNotFound(handleNotFound);
+#else
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print(F("[WEB] Punto de acceso simulado. IP: "));
+  Serial.println(IP);
+
+  // Configurar rutas del servidor (versión simplificada para stub)
+  server.on("/", handleRoot);
+  server.on("/status", handleGetStatus);
+  server.on("/reset", handlePostReset);
+#endif
+
+  server.begin();
+  webReady = true;
+  Serial.println(F("[WEB] Servidor web iniciado en puerto 80."));
+}
+
+/* Function: handleRoot
+   Maneja las solicitudes a la página principal del servidor web.
+*/
+void handleRoot() {
+  String html = F("<!DOCTYPE html><html><head><title>GimmiCoin</title>");
+  html += F("<meta charset='UTF-8'>");
+  html += F("<meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+  html += F("<style>");
+  html += F("body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5}");
+  html += F(".container{max-width:600px;margin:0 auto;background:white;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}");
+  html += F("h1{color:#333;text-align:center;margin-bottom:30px}");
+  html += F(".status{background:#e7f3ff;padding:15px;border-radius:5px;margin:10px 0}");
+  html += F(".sensor{background:#fff3cd;padding:10px;border-radius:5px;margin:5px 0}");
+  html += F("button{background:#007bff;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:16px}");
+  html += F("button:hover{background:#0056b3}");
+  html += F(".reset-btn{background:#dc3545;margin-top:20px}");
+  html += F(".reset-btn:hover{background:#c82333}");
+  html += F("</style>");
+  html += F("<script>");
+  html += F("function updateStatus(){");
+  html += F("fetch('/status').then(r=>r.json()).then(d=>{");
+  html += F("document.getElementById('counter').textContent=d.counter;");
+  html += F("document.getElementById('money').textContent=d.money;");
+  html += F("document.getElementById('sensor').textContent=d.sensorActive?'ACTIVO':'INACTIVO';");
+  html += F("document.getElementById('state').textContent=d.currentState;");
+  html += F("}).catch(e=>console.log('Error:',e))}");
+  html += F("function resetCounter(){");
+  html += F("if(confirm('¿Seguro que quiere resetear el contador?')){");
+  html += F("let u=prompt('Usuario:');let p=prompt('Contraseña:');");
+  html += F("if(u&&p){fetch('/reset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'user='+u+'&pass='+p});setTimeout(updateStatus,1000);}}}");
+  html += F("setInterval(updateStatus,2000);");
+  html += F("window.onload=updateStatus;");
+  html += F("</script></head><body>");
+  html += F("<div class='container'>");
+  html += F("<h1>🪙 GimmiCoin - Sistema de Alcancía</h1>");
+  html += F("<div class='status'>");
+  html += F("<h3>📊 Estado del Sistema</h3>");
+  html += F("<p><strong>Monedas contadas:</strong> <span id='counter'>-</span></p>");
+  html += F("<p><strong>Dinero acumulado:</strong> ₡<span id='money'>-</span></p>");
+  html += F("<p><strong>Estado actual:</strong> <span id='state'>-</span></p>");
+  html += F("</div>");
+  html += F("<div class='sensor'>");
+  html += F("<h3>🔍 Sensores</h3>");
+  html += F("<p><strong>Sensor de moneda:</strong> <span id='sensor'>-</span></p>");
+  html += F("</div>");
+  html += F("<button class='reset-btn' onclick='resetCounter()'>🔄 Resetear Contador</button>");
+  html += F("</div></body></html>");
+
+  server.send(200, F("text/html"), html);
+}
+
+/* Function: handleGetStatus
+   Maneja las solicitudes de estado del sistema en formato JSON.
+*/
+void handleGetStatus() {
+  String json = F("{");
+  json += F("\"counter\":") + String(getCoinCounter()) + F(",");
+  json += F("\"money\":") + String(getMoneyTotal()) + F(",");
+  json += F("\"sensorActive\":");
+  json += isCoinSensorActive() ? F("true") : F("false");
+  json += F(",\"currentState\":\"") + String(stateToString(fsmCtx.state)) + F("\"");
+  json += F("}");
+
+  server.send(200, F("application/json"), json);
+}
+
+/* Function: handlePostReset
+   Maneja las solicitudes de reset del contador con autenticación.
+*/
+void handlePostReset() {
+#if defined(ARDUINO)
+  String user = server.arg(F("user"));
+  String pass = server.arg(F("pass"));
+
+  if (user == WEB_ADMIN_USER && pass == WEB_ADMIN_PASS) {
+    resetCoinCounter();
+    server.send(200, F("text/plain"), F("Contador reseteado exitosamente."));
+  } else {
+    server.send(401, F("text/plain"), F("Usuario o contraseña incorrectos."));
+  }
+#else
+  // Versión simplificada para desarrollo
+  resetCoinCounter();
+  server.send(200, F("text/plain"), F("Contador reseteado (modo desarrollo)."));
+#endif
+}
+
+/* Function: handleNotFound
+   Maneja las solicitudes a rutas no encontradas.
+*/
+void handleNotFound() {
+  server.send(404, F("text/plain"), F("Página no encontrada."));
 }
