@@ -58,8 +58,7 @@ ESP8266WebServer server(80);
 constexpr uint16_t EEPROM_BYTES            = 16;
 constexpr int      EEPROM_ADDR_COUNTER     = 0;
 constexpr int      EEPROM_ADDR_MONEY       = EEPROM_ADDR_COUNTER + sizeof(uint32_t);
-constexpr uint8_t  EEPROM_WRITE_THRESHOLD  = 10;       // Guardar cada 10 monedas
-constexpr unsigned long EEPROM_WRITE_DELAY = 15000UL;  // O tras 15 s sin nuevas monedas
+constexpr unsigned long EEPROM_WRITE_DELAY = 15000UL;  // Tras 15 s sin nuevas monedas reconocidas
 
 static uint32_t coinCounter = 0;           // Conteo total persistente
 static uint32_t lastPersistedCounter = 0;  // Último valor guardado en EEPROM
@@ -367,8 +366,7 @@ void processStateMachine() {
         coinCounter += 1;
         coinsSincePersist = coinCounter - lastPersistedCounter;
         moneyTotal += coinValue;
-        eepromDirty = true;
-        lastCoinMillis = millis();
+  eepromDirty = true;
 
         Serial.print(F("[FSM] Conteo reconocido = "));
         Serial.println(coinCounter);
@@ -401,11 +399,10 @@ void processStateMachine() {
         // Preparar compuerta antes de transporte
         servo_irAAbierto();
         waitWithServer(SERVO_OPEN_SETTLE_MS);
-        servo_irACerrado();
-        waitWithServer(SERVO_CLOSE_SETTLE_MS);
 
-        // Iniciar motor y sonido en paralelo
+        // Iniciar motor y sonido tan pronto como se reconoce la moneda
         const unsigned long actionStart = millis();
+        const unsigned long motorDuration = motor_pulseDurationMs();
         motor_start();
         sonido_reproMoneda();
 
@@ -413,7 +410,7 @@ void processStateMachine() {
           pumpServer();
           const unsigned long elapsed = millis() - actionStart;
 
-          if (elapsed >= motor_pulseDurationMs()) {
+          if (elapsed >= motorDuration && motor_isActive()) {
             motor_stop();
           }
 
@@ -426,6 +423,11 @@ void processStateMachine() {
 
         motor_stop();
 
+        servo_irACerrado();
+        waitWithServer(SERVO_CLOSE_SETTLE_MS);
+
+        lastCoinMillis = millis();
+
         fsmCtx.actuationDone = true;
       }
 
@@ -435,6 +437,7 @@ void processStateMachine() {
     case SystemState::ActuateUnrecognized:
       if (!fsmCtx.actuationDone) {
         Serial.println(F("[FSM] Peso inválido o moneda desconocida. Omitiendo accionamiento."));
+        lastCoinMillis = millis();
         fsmCtx.actuationDone = true;
       }
 
@@ -475,11 +478,6 @@ void manageEepromCommit() {
   }
 
   if (eepromDirty) {
-    if (coinsSincePersist >= EEPROM_WRITE_THRESHOLD) {
-      persistCounter("conteo", false);
-      return;
-    }
-
     if (inactivity >= EEPROM_WRITE_DELAY) {
       persistCounter("timeout", true);
     }
