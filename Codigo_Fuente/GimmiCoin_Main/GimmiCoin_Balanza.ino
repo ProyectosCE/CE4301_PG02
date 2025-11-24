@@ -3,8 +3,10 @@
 // =====================================================================================
 
 #if defined(ARDUINO)
+#include <Arduino.h>
 #include <HX711.h>
 #else
+#include "arduino_stub.h"
 #include <cstdlib>
 // Stub para HX711 en modo desarrollo
 class HX711 {
@@ -86,6 +88,20 @@ long balanza_leerUnidades() {
   // get_units aplica la tara interna; mantenemos escala en 1 para medir en unidades crudas
   const float unidades = balanza.get_units(BALANZA_NUM_MUESTRAS);
   return static_cast<long>(unidades);
+}
+
+void balanza_realizarTara() {
+  unsigned long esperaInicio = millis();
+  while (!balanza.is_ready()) {
+    if (millis() - esperaInicio > 500UL) {
+      Serial.println(F("[BALANZA] No se pudo tarar: HX711 no responde."));
+      return;
+    }
+    delay(20);
+  }
+
+  balanza.tare(15);
+  Serial.println(F("[BALANZA] Tara ejecutada manualmente."));
 }
 
 bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda) {

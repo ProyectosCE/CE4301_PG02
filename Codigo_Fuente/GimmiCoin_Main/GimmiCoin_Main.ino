@@ -101,6 +101,7 @@ void startWebServer(const char* ssid, const char* password);
 void handleRoot();
 void handleGetStatus();
 void handlePostReset();
+void handlePostTare();
 void handleNotFound();
 void pumpServer();
 void waitWithServer(unsigned long ms);
@@ -146,6 +147,7 @@ void sonido_reproMoneda();
 // Balanza
 void balanza_init(int pin_dout, int pin_sck);
 bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda);
+void balanza_realizarTara();
 
 /* Function: setup
    Configura el hardware, restaura el contador persistente e inicia el servidor web.
@@ -762,6 +764,7 @@ void startWebServer(const char* ssid, const char* password) {
   server.on("/", handleRoot);
   server.on("/status", HTTP_GET, handleGetStatus);
   server.on("/reset", HTTP_POST, handlePostReset);
+  server.on("/tare", HTTP_POST, handlePostTare);
   server.onNotFound(handleNotFound);
 #else
   WiFi.softAP(ssid, password);
@@ -773,6 +776,7 @@ void startWebServer(const char* ssid, const char* password) {
   server.on("/", handleRoot);
   server.on("/status", handleGetStatus);
   server.on("/reset", handlePostReset);
+  server.on("/tare", handlePostTare);
 #endif
 
   server.begin();
@@ -797,6 +801,9 @@ void handleRoot() {
   html += F("button:hover{background:#0056b3}");
   html += F(".reset-btn{background:#dc3545;margin-top:20px}");
   html += F(".reset-btn:hover{background:#c82333}");
+  html += F(".tare-btn{background:#17a2b8;margin-top:10px}");
+  html += F(".tare-btn:hover{background:#117a8b}");
+  html += F(".note{margin-top:10px;font-size:14px;color:#555}");
   html += F("</style>");
   html += F("<script>");
   html += F("function updateStatus(){");
@@ -810,6 +817,7 @@ void handleRoot() {
   html += F("if(confirm('¿Seguro que quiere resetear el contador?')){");
   html += F("let u=prompt('Usuario:');let p=prompt('Contraseña:');");
   html += F("if(u&&p){fetch('/reset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'user='+u+'&pass='+p});setTimeout(updateStatus,1000);}}}");
+  html += F("function tareScale(){fetch('/tare',{method:'POST'}).then(r=>r.text().then(t=>({ok:r.ok,msg:t}))).then(res=>{const el=document.getElementById('tareStatus');el.textContent=res.msg;el.style.color=res.ok?'#155724':'#721c24';if(res.ok){setTimeout(updateStatus,500);}}).catch(()=>{const el=document.getElementById('tareStatus');el.textContent='Error al comunicar con la balanza';el.style.color='#721c24';});}");
   html += F("setInterval(updateStatus,2000);");
   html += F("window.onload=updateStatus;");
   html += F("</script></head><body>");
@@ -826,6 +834,8 @@ void handleRoot() {
   html += F("<p><strong>Sensor de moneda:</strong> <span id='sensor'>-</span></p>");
   html += F("</div>");
   html += F("<button class='reset-btn' onclick='resetCounter()'>🔄 Resetear Contador</button>");
+  html += F("<button class='tare-btn' onclick='tareScale()'>⚖️ Recalibrar Balanza</button>");
+  html += F("<p id='tareStatus' class='note'></p>");
   html += F("</div></body></html>");
 
   server.send(200, F("text/html"), html);
@@ -865,6 +875,16 @@ void handlePostReset() {
   resetCoinCounter();
   server.send(200, F("text/plain"), F("Contador reseteado (modo desarrollo)."));
 #endif
+}
+
+void handlePostTare() {
+  if (fsmCtx.state != SystemState::Idle || fsmCtx.isActuating) {
+    server.send(409, F("text/plain"), F("El sistema está procesando una moneda. Intente nuevamente."));
+    return;
+  }
+
+  balanza_realizarTara();
+  server.send(200, F("text/plain"), F("Tara completada. Verifique que la balanza esté vacía."));
 }
 
 /* Function: handleNotFound
