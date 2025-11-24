@@ -1,123 +1,250 @@
-# Definition of Done (DoD)
-
-**Proyecto:** Gimmighoul Coin Collector Robot  
-**Curso:** CE4301 – Arquitectura de Computadores I  
-**Instituto Tecnológico de Costa Rica**  
-**Fecha:** Noviembre 2025  
+# Definition of Done (DoD) – Proyecto GimmiCoin
 
 ---
 
 ## 1. Propósito
 
-La *Definition of Done* (DoD) establece los criterios específicos que determinan cuándo una funcionalidad o entregable del proyecto se considera **completamente implementado y validado**.  
-Su objetivo es garantizar uniformidad, trazabilidad y calidad en todas las fases del desarrollo del sistema: electrónica, firmware, aplicación móvil y documentación.
+La *Definition of Done* (DoD) define los criterios concretos que se deben cumplir para considerar que:
 
-Cada funcionalidad se considerará **terminada** únicamente cuando cumpla con todos los criterios generales y específicos descritos a continuación.
+- Una **funcionalidad**,  
+- Un **módulo** de hardware/firmware,  
+- O un **entregable** del proyecto  
+
+están **completamente terminados** y listos para demostración / defensa.
+
+La DoD aplica a todos los subsistemas:
+
+- Hardware (sensor de contacto, celda de carga + HX711, motor DC, DFPlayer, powerbank, perforada).  
+- Firmware (FSM, lectura de sensores, control de actuadores, EEPROM).  
+- Aplicación web (AP WiFi, endpoints HTTP, UI).  
+- Documentación (repositorio, diagramas, pruebas, video).
 
 ---
 
 ## 2. Criterios Generales de Finalización
 
-Una tarea, issue o historia de usuario se considera *Done* cuando:
+Una historia de usuario, tarea o issue se considera **DONE** cuando:
 
-1. El código o montaje **compila y funciona correctamente** sin errores críticos.  
-2. Se han **realizado pruebas unitarias o de integración** que validan su comportamiento.  
-3. El componente (hardware o software) está **correctamente documentado** en el repositorio (`/docs` o README del módulo).  
-4. La funcionalidad está **integrada en el sistema principal** y opera de forma coherente con los demás módulos.  
-5. Se ha verificado la **compatibilidad eléctrica y lógica** (3.3 V o 5 V según corresponda).  
-6. La funcionalidad cumple los **requisitos definidos en los issues** asociados al sprint correspondiente.  
-7. El resultado ha sido **revisado por al menos un miembro del equipo** y validado durante la reunión de cierre del sprint.  
-8. La tarea está **marcada como “Closed”** en GitHub con comentarios o evidencia de pruebas (foto, video, salida serial, etc.).
+1. El **código compila sin errores** y el firmware corre de forma estable en el ESP8266.  
+2. El módulo de hardware está **correctamente cableado y probado** de forma independiente.  
+3. Se han realizado **pruebas unitarias** o de integración que verifiquen el comportamiento esperado.  
+4. La funcionalidad está **integrada en la FSM** y no rompe otros estados o flujos.  
+5. Se ha actualizado la **documentación correspondiente** en el repositorio (`/docs`, `README`, comentarios de código, etc.).  
+6. Existen **evidencias** (fotos, capturas de la web, videos cortos o salidas por puerto serial) vinculadas al issue.  
+7. Al menos un miembro distinto del autor ha **revisado y aprobado** los cambios (revisión de código / pruebas en hardware).  
+8. La tarea o issue aparece en GitHub como **Closed**, con una referencia a la rama / commit asociado.  
+
+> Ninguna tarea se considera *DONE* solo porque “funciona en mi máquina”: debe pasar por integración, documentación mínima y evidencias.
 
 ---
 
 ## 3. Criterios Específicos por Subsistema
 
-### 3.1 Firmware (Microcontrolador ESP8266)
+### 3.1 Firmware (FSM y lógica de control)
 
-- El código fuente se encuentra organizado y comentado en la carpeta `/firmware`.  
-- El firmware permite:
-  - Leer correctamente la celda de carga a través del **HX711** (comunicación SPI).  
-  - Detectar la presencia de monedas mediante el **sensor infrarrojo**.  
-  - Controlar los **dos servomotores SG90** con movimientos suaves y precisos.  
-  - Activar el **DFPlayer Mini** para reproducir audio tras detectar una moneda.  
-- El firmware arranca correctamente al encender la alimentación sin necesidad de conexión USB.  
-- Se han validado los tiempos de respuesta y estabilidad energética del sistema.  
+La parte de firmware se considera **terminada** cuando:
 
-### 3.2 Sensado y Detección (HX711 + IR)
+- La **FSM** implementa todos los estados definidos:  
+  `DeepSleep`, `WakeInit`, `Detect`, `Weigh`, `Actions`, `UpdateEEPROM`, `WaitCoin`, `PreSleep`.  
+- Se han probado **todas las transiciones** relevantes:
+  - Inserción de moneda simple.  
+  - Inserción de varias monedas seguidas.  
+  - Timeout sin monedas (paso a `PreSleep` y luego `DeepSleep`).  
+- El **código está modularizado** en los archivos `.ino` acordados:
+  - `GimmiCoin_Main.ino` (setup, loop, FSM).  
+  - `GimmiCoin_SensorMoneda.ino` (detección).  
+  - `GimmiCoin_Balanza.ino` (HX711).  
+  - `GimmiCoin_Motor.ino` (motor DC).  
+  - `GimmiCoin_Sonido.ino` (DFPlayer).  
+  - `GimmiCoin_Memoria.ino` (EEPROM).  
+  - `GimmiCoin_Web.ino` (AP + HTTP).  
+- No hay **bloqueos** ni reinicios inesperados durante al menos:
+  - 10 ciclos completos de inserción de moneda → pesaje → motor → sonido → actualización.
 
-- La **celda de carga** mide el peso de las monedas con una **precisión mínima del ±5 %**.  
-- El **sensor infrarrojo** detecta de forma confiable la inserción de la moneda (> 95 % de efectividad).  
-- La lectura digital SPI entre el HX711 y el ESP8266 es estable, sin interferencias ni lecturas falsas.  
-- Se ha documentado la calibración de la celda de carga (procedimiento y valores finales).  
+---
 
-### 3.3 Actuadores (Servos SG90)
+### 3.2 Sensado de Moneda (Sensor de contacto)
 
-- El **servo principal** levanta la tapa del cofre sin obstrucciones ni sobrecarga.  
-- El **servo auxiliar** empuja o limpia la moneda de la celda de carga correctamente tras cada medición.  
-- Ambos servos se alimentan de la línea de 5 V regulada y no generan caída de tensión perceptible.  
-- Se realizaron pruebas de repetición (> 20 ciclos) sin fallos mecánicos o eléctricos.  
+El subsistema de **detección de moneda** se considera DONE cuando:
 
-### 3.4 Audio (DFPlayer Mini + Parlante)
+- El sensor de contacto está correctamente instalado en el canal de entrada de monedas.  
+- El pin del ESP8266:
+  - Está configurado como entrada digital con **pull-down externo** de 10 kΩ.  
+  - Genera una interrupción (ISR) ante el flanco configurado.  
+- La ISR:
+  - Es **muy corta** (solo marca una bandera y registra `micros()`).  
+  - Implementa un **debounce por tiempo** (`MIN_PULSE_INTERVAL`) para evitar rebotes.  
+- La FSM solo procesa **una detección por moneda**, incluso cuando la moneda rebota mecánicamente.  
+- En pruebas con al menos 20 monedas:
+  - La tasa de detecciones falsas (sin moneda) es ~0%.  
+  - La tasa de monedas perdidas es ≤ 5%.
 
-- El módulo DFPlayer Mini reproduce correctamente un archivo de audio en formato `.mp3` almacenado en la microSD.  
-- La conexión con el parlante de **8 Ω / 0.5 W** genera un volumen adecuado sin distorsión.  
-- El audio se activa automáticamente cuando se detecta una moneda.  
-- La comunicación UART entre el DFPlayer y el ESP8266 responde sin errores.  
+---
 
-### 3.5 Alimentación y Regulación (TP4056, MT3608, LM2596)
+### 3.3 Pesaje y Clasificación (Celda de carga + HX711)
 
-- El sistema se alimenta de la **batería Li-Ion de 3.7 V / 2000 mAh**, la cual brinda al menos **30 minutos de operación continua**.  
-- El **TP4056** permite la recarga segura de la batería mediante mini-B, con indicador de carga.  
-- El **MT3608** eleva correctamente la tensión a 5 V y el **LM2596** la reduce a 3.3 V estables.  
-- Se verifican las tensiones en carga y descarga con un multímetro antes de cerrar la etapa de pruebas.  
-- Los condensadores de filtrado (470 µF en 5 V y 100 µF en 3.3 V) están instalados y operativos.  
+El subsistema de **pesaje** se considera DONE cuando:
 
-### 3.6 Comunicación y Aplicación Móvil
+- La celda TAL221 está firmemente montada en la estructura del Gimmighoul, sin juego lateral excesivo.  
+- El módulo HX711:
+  - Está correctamente cableado (DT/SCK a pines del D1 Mini, VCC 3.3 V, GND común).  
+  - Usa una frecuencia de muestreo estable (10–80 SPS).  
+- Se realizó una **calibración documentada**:
+  - Incluye factores de conversión de lectura cruda → gramos.  
+  - Usa al menos dos pesos de referencia (monedas reales).  
+- La función de lectura:
+  - Promedia varias muestras (`N ≥ 10`).  
+  - Aplica filtros básicos (por ejemplo, descartar outliers).  
+- La clasificación:
+  - Define rangos de peso claros para cada tipo de moneda soportada.  
+  - Se probó con al menos 5 lecturas por tipo de moneda.  
 
-- El ESP8266 crea una red WiFi local y transmite los datos de ahorro al cliente móvil.  
-- La aplicación móvil recibe, interpreta y muestra correctamente el monto total acumulado.  
-- La actualización del valor ocurre en **tiempo real** al insertar una moneda.  
-- Se han realizado pruebas de conexión y desconexión sin pérdida de datos.  
+Estado objetivo: **error de clasificación ≤ 5–10 %** en pruebas controladas.
 
-### 3.7 Estructura Física y Ensamble
+---
 
-- Todos los módulos están montados en una **placa perforada o base fija** con cableado ordenado.  
-- El diseño físico del **Pokémon Gimmighoul** (cofre) fue impreso en 3D o construido artesanalmente según especificaciones.  
-- La tapa abre y cierra correctamente durante las pruebas funcionales.  
-- El sistema opera sin conexión a la computadora (autónomo con batería).  
+### 3.4 Acciones Físicas: Motor DC
 
-### 3.8 Documentación y Entrega Final
+El subsistema del **motor DC** se considera DONE cuando:
 
-- Se incluyen en el repositorio:
-  - Diagramas eléctricos y de conexión.  
-  - Código fuente del firmware y aplicación móvil.  
-  - Fotografías del prototipo final ensamblado.  
-  - Resultados de pruebas y calibraciones.  
-- El archivo **README.md** del repositorio principal contiene:
-  - Instrucciones de montaje.  
-  - Modo de uso del sistema.  
-  - Créditos del equipo y licenciamiento.  
+- El motor está montado en la estructura de forma que:
+  - Despeje completamente la moneda de la plataforma de pesaje.  
+  - No interfiera físicamente con el sensor ni con la celda.  
+- La etapa de potencia con **2N2222 + diodo flyback**:
+  - Presenta conexiones correctas (base, colector, emisor, motor, diodo).  
+  - Usa una resistencia base adecuada (por ejemplo 1 kΩ).  
+- El firmware:
+  - Implementa una función `motor_pulse(T_MOTOR_MS)` o equivalente.  
+  - Garantiza que el motor se enciende por el tiempo correcto y luego se apaga.  
+- En pruebas de ≥ 20 ciclos:
+  - El motor no provoca reset del ESP8266.  
+  - No induce errores severos en la lectura de la balanza (se lee solo con el motor apagado).  
+
+---
+
+### 3.5 Audio (DFPlayer Mini + Parlante)
+
+El subsistema de **audio** se considera DONE cuando:
+
+- El DFPlayer está correctamente cableado:
+  - Alimentación a 5 V de la powerbank.  
+  - GND común con el resto del sistema.  
+  - Línea RX protegida con resistencia serie (≈1 kΩ).  
+- La tarjeta microSD:
+  - Contiene al menos un archivo `.mp3` correctamente numerado.  
+- El firmware:
+  - Inicializa el DFPlayer con un retardo suficiente (≥ 1200 ms).  
+  - Permite reproducir el sonido de forma confiable ante cada moneda válida.  
+- En pruebas de 20 monedas:
+  - El sonido se reproduce > 90 % de las veces.  
+  - No se escuchan artefactos graves por falta de alimentación (distorsión fuerte).  
+
+---
+
+### 3.6 Alimentación (Powerbank 5 V)
+
+La **alimentación** del sistema se considera DONE cuando:
+
+- El robot opera completamente desde una **powerbank de 5 V**, sin estar conectado al USB de la PC.  
+- Se midieron aproximaciones de consumo en:
+  - Reposo (sin monedas).  
+  - Durante motores y DFPlayer.  
+- No se presentan resets o parpadeos extraños al activar el motor o reproducir audio.  
+- La autonomía demostrada es razonable para el uso esperado (por ejemplo, ≥ 30 minutos de uso continuo en demostración).
+
+---
+
+### 3.7 Persistencia (EEPROM / Flash)
+
+El subsistema de **memoria persistente** se considera DONE cuando:
+
+- El total acumulado (en colones o equivalentes) se guarda en EEPROM / Flash.  
+- Se implementa una **estrategia de escritura diferida**:
+  - Solo se escribe después de un tiempo sin nuevas monedas (ej. 12 s).  
+  - Durante la inserción frecuente de monedas, solo se actualiza en RAM.  
+- Al reiniciar el dispositivo:
+  - El total se restaura correctamente desde EEPROM.  
+- Se verificó que:
+  - No se escribe en EEPROM en cada moneda.  
+  - El número de escrituras se mantiene razonable frente a la vida útil estimada.
+
+---
+
+### 3.8 Aplicación Web y Comunicación WiFi
+
+La **aplicación web** se considera DONE cuando:
+
+- El ESP8266 crea un **Access Point** con SSID y password definidos.  
+- Un teléfono o laptop puede:
+  - Conectarse al AP.  
+  - Abrir la URL `http://192.168.4.1/`.  
+- Se implementan los endpoints:
+  - `/` (HTML principal).  
+  - `/estado` (JSON).  
+  - `/admin` (panel admin, Basic Auth).  
+  - `/reset` (reseteo del contador, Basic Auth).  
+- La interfaz:
+  - Muestra el total acumulado y el estado del sistema.  
+  - Se actualiza periódicamente (por ejemplo, usando `fetch('/estado')` con `setInterval`).  
+- La función de `reset`:
+  - Reinicia el contador a 0.  
+  - Actualiza EEPROM correctamente.  
+
+Debe existir evidencia de uso real:
+- Capturas de pantalla desde un teléfono.  
+- Pruebas de conexión y reconexión sin cuelgues.
+
+---
+
+### 3.9 Estructura Física y Perforada
+
+La parte **física** se considera DONE cuando:
+
+- Todo el circuito electrónico está montado en una **tarjeta perforada** o PCB.  
+- No hay conexiones sueltas o puentes temporales sobre protoboard.  
+- El montaje mecánico dentro del Gimmighoul:
+  - Permite cerrar la estructura.  
+  - Protege la electrónica de contacto directo con las monedas.  
+- Se cuenta con:
+  - Fotografías del montaje interno.  
+  - Fotografías del robot completo.
+
+---
+
+### 3.10 Documentación y Repositorio
+
+La documentación se considera DONE cuando:
+
+- El repositorio Git contiene:
+  - `README.md` completo y actualizado.  
+  - Carpeta `/docs` con:
+    - Arquitectura hardware y software.  
+    - Aplicación de usuario.  
+    - BOM.  
+    - Risk Assessment.  
+    - Definition of Done (este documento).  
+- Existen:
+  - Diagramas en **Mermaid** o imágenes claras (diagramas de bloques, FSM).  
+  - Evidencias de pruebas (fotos, capturas, video de demo).  
+- Los issues principales están:
+  - Cerrados.  
+  - Enlazados a commits o Pull Requests.
 
 ---
 
 ## 4. Validación Final del Proyecto
 
-El proyecto se considera **completamente finalizado** cuando:
+El proyecto GimmiCoin se considera **completamente terminado** cuando:
 
-1. Todos los **issues** y **sub-issues** de los sprints 0–4 están cerrados.  
-2. El sistema es capaz de **detectar, pesar y registrar** monedas de forma continua sin intervención externa.  
-3. Se reproduce el sonido del Gimmighoul al insertar una moneda.  
-4. Los datos del monto total se visualizan correctamente en la aplicación móvil.  
-5. El circuito y la carcasa física se encuentran ensamblados y funcionales.  
-6. Toda la documentación técnica y de usuario está disponible en el repositorio.
-
----
-
-## 5. Revisión y Aprobación
-
-| **Versión** | **Fecha** | **Responsables** | **Descripción** |
-|--------------|------------|------------------|------------------|
-| 1.0 | 05/11/2025 | José B. Barquero, J. E. Campos, J. Feng, A. Montero | Versión inicial de la Definition of Done para el proyecto Gimmighoul Coin Collector Robot. |
+1. Todas las historias de usuario planificadas para el alcance del curso están marcadas como DONE según los criterios anteriores.  
+2. El robot:
+   - Detecta monedas por contacto.  
+   - Las pesa y clasifica correctamente (según calibres definidos).  
+   - Acciona el motor para limpiar la bandeja.  
+   - Reproduce audio con el DFPlayer.  
+3. El total ahorrado puede verse en la aplicación web y se mantiene tras reinicios.  
+4. El sistema funciona durante la **demostración completa** sin fallos críticos.  
+5. Toda la documentación técnica y de usuario está disponible y sincronizada con el estado real del hardware y firmware.  
 
 ---
+

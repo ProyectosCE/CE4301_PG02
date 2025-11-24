@@ -1,169 +1,285 @@
-# Arquitectura de Referencia – Gimmighoul Coin Collector
+# Arquitectura de Referencia – GimmiCoin (Gimmighoul Coin Collector)
 
-**Proyecto:** Gimmighoul Coin Collector Robot  
-**Curso:** CE4301 – Arquitectura de Computadores I  
-**Instituto Tecnológico de Costa Rica**  
-**Fecha:** Noviembre 2025  
+---
 
-## 1. Resumen del sistema
+## 1. Resumen del Sistema
 
-El sistema es una alcancía inteligente con diseño del Pokémon Gimmighoul. Al insertar una moneda:
+GimmiCoin es una **alcancía inteligente** basada en un microcontrolador **ESP8266 (D1 Mini)** que:
 
-1. Un sensor infrarrojo detecta el evento y despierta al sistema si está dormido.
-2. El ESP8266 levanta la tapa (servo 1).
-3. Pesa la moneda con una celda de carga (HX711).
-4. Expulsa/limpia la celda (servo 2).
-5. Reproduce un efecto sonoro (DFPlayer + parlante).
-6. Actualiza el total y expone los datos por WiFi en modo Punto de Acceso (AP) para que la app móvil los consulte.
+1. Detecta monedas mediante un **sensor de contacto metálico**.
+2. Pesa la moneda usando una **celda de carga TAL221 + módulo HX711**.
+3. Acciona un **motor DC** para desplazar la moneda fuera de la bandeja de pesaje.
+4. Reproduce un sonido con un **DFPlayer Mini** + parlante.
+5. Actualiza un **contador total** almacenado en EEPROM.
+6. Expone el estado mediante una **aplicación web** servida por el ESP8266 en modo **Access Point (AP)**.
 
-## 2. Justificación de decisiones de diseño
+La arquitectura de referencia define cómo se organizan estos componentes de hardware y software, así como los flujos principales y las interfaces entre ellos.
 
-- **D1 mini ESP8266 (con WiFi integrado):** reduce tiempo de integración al traer conectividad nativa, bootloader por USB y ecosistema de librerías estable. El equipo ya tiene experiencia previa con este MCU, lo que baja el riesgo y acelera el desarrollo.
-- **Clasificación por peso (celda de carga + HX711):** en Costa Rica hay monedas con **diámetros similares** (p. ej., ¢100 y ¢500; ¢25 y ¢50), lo que hace poco fiable la clasificación por “canales” o solo por tiempo de interrupción óptica. El **peso** distingue de forma robusta esos casos y evita errores de rampa/canal.
+---
 
-## 3. Arquitectura de alto nivel (bloques de hardware)
+## 2. Objetivos Arquitectónicos
+
+Los principales objetivos de diseño son:
+
+- **Simplicidad y robustez:** Minimizar la cantidad de actuadores y sensores mecánicamente complejos. Se usa un solo motor DC y un sensor de contacto simple.
+- **Medición confiable:** Usar **peso** en lugar de geometría para distinguir monedas con diámetros similares.
+- **Bajo acoplamiento:** Separar hardware, firmware y aplicación web en módulos bien definidos.
+- **Escalabilidad:** Permitir futuras mejoras (clasificación por tipo de moneda, más vistas en la app, integración con backend externo).
+- **Trazabilidad ágil:** Mantener una arquitectura que se refleje directamente en el **Product Backlog**, la **Definition of Done (DoD)** y el **Risk Assessment**.
+
+---
+
+## 3. Arquitectura de Hardware (Vista de Bloques)
+
+### 3.1 Diagrama de bloques de hardware
 
 ```mermaid
 flowchart LR
-  subgraph PWR[Alimentación]
-    BATT[Batería LiPo 3.7V 2000mAh]
-    TP[TP4056<br>carga + protección]
-    BOOST[MT3608<br>3.7V → 5V]
-    BUCK[LM2596<br>5V → 3.3V]
-  end
+    subgraph PWR[Alimentación]
+        PB[Powerbank 5V]
+    end
 
-  subgraph MCU[D1 mini – ESP8266]
-    FW[Firmware<br>FSM + AP WiFi + HTTP]
-    NVS[Almacenamiento local<br>NVS/Flash]
-  end
+    subgraph MCU[D1 Mini – ESP8266]
+        CPU[Firmware FSM<br/>WiFi AP + HTTP]
+        MEM[EEPROM / Flash<br/>contador total]
+    end
 
-  IR[Sensor IR<br>detección de moneda]
-  LC[Celda de carga 100 g]
-  HX[HX711<br>ADC 24 bits]
-  S1[Servo SG90<br>tapa]
-  S2[Servo SG90<br>limpieza]
-  MP3[DFPlayer Mini]
-  SPK[Parlante 8Ω/0.5W]
+    SC[Sensor de contacto<br/>moneda]
+    LC[Celda de carga TAL221<br/>100 g]
+    HX[HX711<br/>ADC 24 bits]
+    MOT[Motor DC<br/>desplazamiento moneda]
+    NPN[2N2222 + diodo<br/>etapa de potencia]
+    DF[DFPlayer Mini]
+    SPK[Parlante 8Ω 0.5W]
 
-  %% Señales
-  IR -->|GPIO digital| MCU
-  LC --- HX
-  HX -->|DT,SCK| MCU
-  MCU -->|PWM| S1
-  MCU -->|PWM| S2
-  MCU <-->|UART| MP3
-  MP3 --- SPK
-  MCU <-->|SPIFFS/NVS| NVS
+    %% Conexiones de señal
+    SC -->|GPIO digital| MCU
+    LC --- HX
+    HX -->|DT, SCK| MCU
+    MCU -->|GPIO| NPN
+    NPN --> MOT
+    MCU <-->|UART| DF
+    DF --- SPK
 
-  %% Energía
-  BATT --> TP
-  TP -->|BAT| BOOST
-  BOOST -->|5V| S1
-  BOOST -->|5V| S2
-  BOOST -->|5V| MP3
-  TP -->|BAT| BUCK
-  BUCK -->|3.3V| MCU
-  BUCK -->|3.3V| HX
+    %% Alimentación
+    PB -->|5V| MCU
+    PB -->|5V| MOT
+    PB -->|5V| DF
 ```
 
-**Notas eléctricas:**
+### 3.2 Justificación de decisiones de hardware
 
-- Servos y DFPlayer alimentados desde **5 V** (BOOST).
-- ESP8266 y HX711 desde **3.3 V** (BUCK).
-- **GND común** para todos los módulos.
-- Desacoplos: 470–1000 µF en 5 V; 100–220 µF en 3.3 V cerca del ESP8266.
+* **Powerbank 5 V:**
+  Simplifica la alimentación (no se requiere etapa LiPo + cargador + boost/buck separados). Además, las powerbanks son fáciles de recargar y proporcionan corriente suficiente para el motor y DFPlayer.
 
-## 4. Arquitectura de software (firmware en ESP8266)
+* **Sensor de contacto:**
+  Es una solución simple y confiable para detectar el paso de monedas, sin necesidad de sensor IR ni óptico. Facilita el montaje mecánico y reduce costos.
 
-- **Capas:**
-  - Drivers: IR (GPIO/interrupt), HX711 (DT/SCK), Servos (PWM), DFPlayer (UART).
-  - Servicios: Detección, Pesaje/Filtrado, Limpieza, Audio, Telemetría.
-  - Aplicación: **FSM** (máquina de estados) + Exposición HTTP (modo AP).
-- **Almacenamiento local:** totales y últimos eventos en **NVS/flash** del ESP8266.
+* **Celda de carga + HX711:**
+  Permite diferenciar monedas por peso con buena resolución. El HX711 provee una interfaz digital síncrona sencilla de manejar desde el ESP8266.
 
-### 4.1 Máquina de estados (FSM)
+* **Motor DC + 2N2222:**
+  Un solo actuador mecánico es suficiente para despejar la bandeja. La etapa de potencia con 2N2222 + diodo flyback es una solución estándar y robusta.
+
+* **DFPlayer Mini + parlante:**
+  Descentraliza el manejo de audio (el ESP8266 solo envía comandos por UART), reduciendo la carga de procesamiento y memoria del microcontrolador.
+
+---
+
+## 4. Arquitectura del Software Embebido
+
+La arquitectura de software se organiza en tres capas principales:
+
+1. **Drivers / HAL (Hardware Abstraction Layer)**
+2. **Servicios de dominio (lógica de GimmiCoin)**
+3. **Capa de aplicación y comunicación (FSM + HTTP)**
+
+### 4.1 Diagrama de capas de software
 
 ```mermaid
-stateDiagram-v2
-  [*] --> IDLE
-  IDLE --> DETECT : Trigger IR
-  DETECT --> MEASURE : Estabilizar peso (promedio)
-  MEASURE --> CLEAN : Valor válido
-  CLEAN --> SOUND
-  SOUND --> REPORT
-  REPORT --> IDLE
-  IDLE --> SLEEP : Timeout inactividad
-  SLEEP --> IDLE : Wake por IR
+flowchart TD
+    subgraph APP[Capa de Aplicación]
+        FSM[FSM de GimmiCoin<br/>DeepSleep, Detect, Weigh,<br/>Actions, UpdateEEPROM, Wait, PreSleep]
+        HTTP[Servidor HTTP<br/>/ /estado /admin /reset]
+    end
+
+    subgraph SRV[Servicios]
+        DET[Servicio de detección de moneda]
+        WEI[Servicio de pesaje y filtrado]
+        ACT[Servicio de acciones<br/>motor + audio]
+        PERS[Servicio de persistencia<br/>EEPROM]
+        NET[Servicio de red<br/>WiFi AP]
+    end
+
+    subgraph DRV[Drivers / HAL]
+        D_GPIO[Driver GPIO<br/>sensor, motor]
+        D_HX[Driver HX711]
+        D_DFP[Driver DFPlayer]
+        D_EE[Driver EEPROM]
+        D_WIFI[Driver WiFi / TCP]
+    end
+
+    FSM --> DET
+    FSM --> WEI
+    FSM --> ACT
+    FSM --> PERS
+    HTTP --> NET
+    DET --> D_GPIO
+    WEI --> D_HX
+    ACT --> D_GPIO
+    ACT --> D_DFP
+    PERS --> D_EE
+    NET --> D_WIFI
 ```
 
-## 5. Arquitectura de la aplicación móvil
+### 4.2 Relación con módulos `.ino`
 
-- **Conexión:** la app se conecta a la red **AP** creada por el ESP8266 (sin Internet).
-- **Vistas principales:** Total acumulado, Historial básico (desde MCU), Ajustes mínimos.
-- **Sin base de datos local:** la app muestra datos consultados al MCU y permite ajustes manuales (ej. retirar monto).
+* `GimmiCoin_Main.ino` → FSM + inicialización.
+* `GimmiCoin_SensorMoneda.ino` → parte de **DET + D_GPIO**.
+* `GimmiCoin_Balanza.ino` → **WEI + D_HX**.
+* `GimmiCoin_Motor.ino` → **ACT + D_GPIO**.
+* `GimmiCoin_Sonido.ino` → **ACT + D_DFP**.
+* `GimmiCoin_Memoria.ino` → **PERS + D_EE**.
+* `GimmiCoin_Web.ino` → **HTTP + NET + D_WIFI**.
 
-## 6. Interfaces y contratos (AP WiFi + HTTP)
+Este mapeo permite vincular directamente el **Product Backlog** con componentes arquitectónicos concretos (por ejemplo, historias de usuario para el servicio de pesaje, o para la interfaz web).
 
-- **Modo AP (Access Point):**
-  - El ESP8266 crea una red local (SSID/clave configurables).
-  - La app se conecta a ese AP y realiza solicitudes HTTP al **IP del ESP** (por defecto, 192.168.4.1).
-  - No requiere router externo.
-- **HTTP simple (ejemplos):**
-  - `GET /status` → `{ fw:"1.0.0", total_crc: 1234, count: 9 }`
-  - `GET /history?limit=50` → `[{ ts:"2025-11-02T20:10Z", peso_g:9.0, valor_crc:100, total_crc:1234 }, ...]`
-  - `POST /adjust` → cuerpo `{ delta_crc:-100 }` (para retirar monedas de forma manual desde la app).
-- **Periféricos:**
-  - DFPlayer: UART 9600 bps (play/pause/volume).
-  - HX711: DT/SCK (estilo SPI de 2 hilos).
-  - Servos: PWM ~50 Hz.
+---
 
-## 7. Flujos clave (bloques)
+## 5. Arquitectura de Comunicación y Aplicación Web
 
-### 7.1 Detección → Pesaje → Limpieza → Audio → Reporte
+El modelo de comunicación es **cliente–servidor** sobre HTTP dentro de una red local creada por el propio robot.
+
+### 5.1 Diagrama de bloques de comunicación
+
+```mermaid
+flowchart TD
+    C[Teléfono / Laptop<br/> Cliente Web] <--> S[ESP8266<br/>AP + Servidor HTTP]
+
+    S --> H[HTML - Página principal<br/>GET /]
+    S --> J[JSON de estado<br/>GET /estado]
+    S --> A[Panel admin<br/>GET /admin]
+    S --> R[Comando RESET<br/>GET /reset]
+```
+
+### 5.2 Diagrama de secuencia – Lectura de estado
 
 ```mermaid
 sequenceDiagram
-  participant IR as Sensor IR
-  participant MCU as ESP8266 (FSM)
-  participant HX as HX711
-  participant S1 as Servo Tapa
-  participant S2 as Servo Limpieza
-  participant MP3 as DFPlayer
-  participant APP as App Móvil
+    participant User as Cliente Web
+    participant HTTP as ESP8266 HTTP
+    participant FSM as FSM / Servicios
 
-  IR->>MCU: Pulso (moneda detectada)
-  MCU->>S1: Abrir tapa (PWM)
-  MCU->>HX: Lecturas múltiples (promedio)
-  HX-->>MCU: Peso estable (g)
-  MCU->>S2: Expulsar moneda (PWM)
-  MCU->>MP3: Reproducir efecto
-  MCU->>APP: Exponer total/registro vía HTTP
-  APP-->>MCU: Consulta GET /status o /history
+    User->>HTTP: GET /estado
+    HTTP->>FSM: Solicitar estado actual
+    FSM-->>HTTP: total_crc, peso_ultimo, moneda_valida
+    HTTP-->>User: JSON { total_crc, peso_ultimo, moneda_valida }
+    User->>User: Refresca UI
 ```
 
-### 7.2 Gestión de energía
+### 5.3 Diagrama de secuencia – Reset desde el panel admin
 
-- **Deep Sleep** tras timeout en IDLE; **wake** por interrupción del IR.
-- Antes de dormir, se sincroniza el estado mínimo necesario en NVS/flash.
+```mermaid
+sequenceDiagram
+    participant Admin as Cliente (Admin)
+    participant HTTP as ESP8266 HTTP
+    participant MEM as EEPROM / Persistencia
 
-## 9. Seguridad y robustez
+    Admin->>HTTP: GET /reset (Basic Auth)
+    HTTP->>MEM: Escribir total_crc = 0
+    MEM-->>HTTP: Confirmación de escritura
+    HTTP-->>Admin: JSON { "status": "ok", "reset": true }
+```
 
-- **Eléctrica:** protecciones del TP4056, desacoplos en 5 V/3.3 V, retornos de corriente de servos separados del plano del MCU.
-- **Red:** AP con WPA2 y endpoints mínimos; validar inputs en `/adjust` para evitar montos negativos erróneos.
-- **Firmware:** validación de rangos (peso, tiempos), reintentos en UART/HX711, watchdog opcional.
+---
 
-## 10. Rendimiento y dimensionamiento
+## 6. Máquina de Estados de Alto Nivel (FSM)
 
-- Latencia objetivo por ciclo completo: ≤ 4 s.
-- Precisión de peso: error ≤ ±5 % tras calibración.
-- Alcance WiFi interior: 5–8 m en línea de vista.
-- Autonomía: según perfil de uso; mediciones documentadas en pruebas de potencia.
+La FSM coordina el comportamiento global del sistema, integrando sensores, acciones, persistencia y deep sleep.
 
-## 11. Trazabilidad
+```mermaid
+stateDiagram-v2
+    [*] --> DeepSleep
 
-- **DoD:** `docs/Definition_of_Done.md`
-- **Risk Assessment:** `docs/Risk_Assessment.md`
-- **BOM:** `docs/BOM_AlternativaB.md`
-- **Roadmap y Issues:** GitHub Projects (Sprints 0–4)
+    state "Deep Sleep" as DeepSleep
+    state "Wake / Init" as WakeInit
+    state "Detección de moneda" as Detect
+    state "Pesaje (HX711)" as Weigh
+    state "Acciones (motor / audio)" as Actions
+    state "Actualizar EEPROM" as UpdateEEPROM
+    state "Esperar otra moneda" as WaitCoin
+    state "Pre-sleep" as PreSleep
+
+    DeepSleep --> WakeInit: Wake por sensor / reset
+    WakeInit --> Detect: Init pines / HX711 /\nDFPlayer / WiFi AP
+    Detect --> Weigh: Moneda detectada\n(bandera ISR)
+    Weigh --> Actions: Peso estable\ny moneda válida
+    Actions --> UpdateEEPROM: Motor + sonido OK
+    UpdateEEPROM --> WaitCoin: Guardar total\n(si timeout cumplido)
+
+    WaitCoin --> Detect: Nueva moneda\nantes del timeout
+    WaitCoin --> PreSleep: Sin monedas\npor T_TIMEOUT
+
+    PreSleep --> DeepSleep: Guardar estado mínimo\n+ entrar a deep sleep
+```
+
+---
+
+## 7. Relación con Metodología Ágil
+
+La arquitectura de referencia sirvió como base para:
+
+* **Product Backlog:**
+
+  * Historias de usuario ligadas a bloques arquitectónicos:
+
+    * HU: “Como usuario quiero ver el total ahorrado en mi teléfono” → módulo HTTP + servicios NET + PERS.
+    * HU: “Como usuario quiero que la alcancía reconozca monedas automáticamente” → DET + WEI + FSM.
+    * HU: “Como administrador quiero resetear el contador” → HTTP `/admin` + `/reset` + PERS.
+
+* **Definition of Done (DoD):**
+
+  * Cada historia de usuario se considera terminada cuando:
+
+    * Está integrada en la FSM y en el bloque arquitectónico correspondiente.
+    * Se verifican pruebas unitarias/integración sobre las rutas HTTP, pesaje, detección y motor.
+
+* **Risk Assessment:**
+
+  * Los riesgos críticos (por ejemplo, calibración de peso, ruido eléctrico, integración física) se mapean a componentes:
+
+    * R9 (calibración) → bloque WEI + D_HX.
+    * R2 (alimentación) → bloque PWR + MOT + DFPlayer.
+    * R7 (integración física) → interacción entre hardware mecánico (LC, MOT) y comp. electrónicos.
+
+* **Planificación por Sprints:**
+
+  * Sprint 1: Sensado de moneda (DET), prototipo de pesaje (WEI) y servidor web mínimo.
+  * Sprint 2: FSM completa, integración motor + DFPlayer (ACT).
+  * Sprint 3: Deep sleep, refinamiento de UI y calibración de peso.
+  * Sprint 4: Pruebas finales, documentación y video de demostración.
+
+De esta forma, la arquitectura no es solo un diagrama estático, sino una **guía para el desarrollo ágil**, que permite priorizar, estimar esfuerzo y evaluar el progreso de forma continua.
+
+---
+
+## 8. Seguridad y Robustez
+
+La arquitectura contempló desde el inicio aspectos de:
+
+* **Seguridad eléctrica:**
+
+  * Uso de diodo flyback en motor.
+  * Desacoplo en 5 V y 3.3 V.
+  * GND común y rutas separadas para señales sensibles.
+* **Seguridad lógica:**
+
+  * Autenticación básica en `/admin` y `/reset`.
+  * Validación de entradas del cliente (por ejemplo, impedir montos negativos).
+* **Robustez de firmware:**
+
+  * ISR corta para el sensor de contacto.
+  * Promediado de lecturas de HX711 para evitar ruido.
+  * Escrituras diferidas en EEPROM para reducir desgaste.
 
 ---
