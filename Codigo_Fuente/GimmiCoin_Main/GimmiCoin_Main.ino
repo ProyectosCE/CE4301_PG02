@@ -34,9 +34,9 @@
 
 // Duraciones principales
 const int T_SONIDO     = 2000;
-const unsigned long PRE_MEASURE_DELAY_MS = 1000;
-const unsigned long SERVO_OPEN_SETTLE_MS = 300;
-const unsigned long SERVO_CLOSE_SETTLE_MS = 2000;
+const unsigned long PRE_MEASURE_DELAY_MS = 0;    // Sin demora para respuesta inmediata
+const unsigned long SERVO_OPEN_SETTLE_MS = 200;  // Reducido
+const unsigned long SERVO_CLOSE_SETTLE_MS = 500; // Reducido para no demorar
 constexpr unsigned long DEEP_SLEEP_SETTLE_MS = 250;  // Tiempo para que la web refleje el último estado
 
 // Valores monetarios por tipo de moneda identificado
@@ -89,6 +89,7 @@ struct StateContext {
   float lastWeight = 0.0F;
   int lastCoinValue = 0;
   unsigned long stateSince = 0;
+  bool isActuating = false;  // Flag para evitar actualizar web durante actuación
 };
 
 static StateContext fsmCtx;
@@ -198,11 +199,11 @@ void setup() {
      Debe ejecutarse continuamente y no debe bloquear por largos periodos.
 */
 void loop() {
-  pumpServer();
+  pumpServer();           // Solo actualizará web si no está actuando
   processStateMachine();
   manageEepromCommit();
   maybeEnterDeepSleep();
-  waitWithServer(5);
+  delay(5);               // Cambio de waitWithServer a delay simple
 }
 
 
@@ -222,7 +223,8 @@ void loop() {
      Llamar con frecuencia para evitar timeouts en el servidor.
 */
 void pumpServer() {
-  if (webReady) {
+  // No actualizar web durante actuación para evitar mostrar valores intermedios
+  if (webReady && !fsmCtx.isActuating) {
     server.handleClient();
   }
   yield();
@@ -245,6 +247,26 @@ void waitWithServer(unsigned long ms) {
   unsigned long inicio = millis();
   while (millis() - inicio < ms) {
     pumpServer();
+    delay(5);
+  }
+}
+
+/* Function: waitWithoutServer
+   Espera un intervalo dado sin atender el servidor web (para actuación).
+
+   Params:
+     - ms: unsigned long - milisegundos a esperar.
+
+   Returns:
+     - void - no retorna valor.
+
+   Restriction:
+     Solo usar durante actuación para evitar actualizar web prematuramente.
+*/
+void waitWithoutServer(unsigned long ms) {
+  unsigned long inicio = millis();
+  while (millis() - inicio < ms) {
+    yield();
     delay(5);
   }
 }
@@ -324,10 +346,7 @@ void processStateMachine() {
       break;
 
     case SystemState::MeasureCoin:
-      if (millis() - fsmCtx.stateSince < PRE_MEASURE_DELAY_MS) {
-        return;
-      }
-
+      // Medición inmediata sin demoras
       if (!fsmCtx.measurementDone) {
         Serial.println(F("[FSM] Iniciando medición de moneda."));
         fsmCtx.measurementStable = balanza_medirMonedaEstable(fsmCtx.lastWeight, fsmCtx.lastCoinValue);
@@ -358,6 +377,8 @@ void processStateMachine() {
 
     case SystemState::ActuateRecognized:
       if (!fsmCtx.actuationDone) {
+        fsmCtx.isActuating = true;  // Marcar inicio de actuación
+        
         Serial.print(F("[FSM] Actuando moneda reconocida (₡"));
         Serial.print(fsmCtx.lastCoinValue);
         Serial.println(F(")"));
@@ -398,7 +419,7 @@ void processStateMachine() {
 
         // Preparar compuerta antes de transporte
         servo_irAAbierto();
-        waitWithServer(SERVO_OPEN_SETTLE_MS);
+        waitWithoutServer(SERVO_OPEN_SETTLE_MS);
 
         // Iniciar motor y sonido tan pronto como se reconoce la moneda
         const unsigned long actionStart = millis();
@@ -406,8 +427,9 @@ void processStateMachine() {
         motor_start();
         sonido_reproMoneda();
 
+        // Actuar sin actualizar web durante la actuación
         while (true) {
-          pumpServer();
+          yield(); // Solo yield, NO pumpServer para evitar actualizar web
           const unsigned long elapsed = millis() - actionStart;
 
           if (elapsed >= motorDuration && motor_isActive()) {
@@ -424,9 +446,10 @@ void processStateMachine() {
         motor_stop();
 
         servo_irACerrado();
-        waitWithServer(SERVO_CLOSE_SETTLE_MS);
+        waitWithoutServer(SERVO_CLOSE_SETTLE_MS);
 
         lastCoinMillis = millis();
+        fsmCtx.isActuating = false;  // Marcar fin de actuación
 
         fsmCtx.actuationDone = true;
       }
@@ -436,8 +459,10 @@ void processStateMachine() {
 
     case SystemState::ActuateUnrecognized:
       if (!fsmCtx.actuationDone) {
+        fsmCtx.isActuating = true;  // Marcar para evitar updates durante procesamiento
         Serial.println(F("[FSM] Peso inválido o moneda desconocida. Omitiendo accionamiento."));
         lastCoinMillis = millis();
+        fsmCtx.isActuating = false; // Fin inmediato ya que no hay actuación real
         fsmCtx.actuationDone = true;
       }
 
@@ -451,6 +476,7 @@ void processStateMachine() {
       fsmCtx.actuationDone = false;
       fsmCtx.lastCoinValue = 0;
       fsmCtx.lastWeight = 0.0F;
+      fsmCtx.isActuating = false;  // Asegurar que no quede marcado
       sensorMoneda_setConteo(coinCounter);
       transitionTo(SystemState::Idle);
       break;
@@ -526,7 +552,11 @@ void persistCounter(const char* reason, bool dueToInactivity) {
   Serial.print(F("[EEPROM] Dinero acumulado = ₡"));
   Serial.println(moneyValue);
 
-  pumpServer();
+  // Solo actualizar web cuando se persiste por inactividad (timeout)
+  if (dueToInactivity) {
+    Serial.println(F("[EEPROM] Actualizando web tras persistencia por timeout."));
+    pumpServer();
+  }
 
   if (dueToInactivity) {
     scheduleDeepSleep();
