@@ -8,7 +8,8 @@ HX711 balanza;
 
 
 // Calculado para que 1 moneda de 100 colones ≈ 9 g
-const float FACTOR_CONVERSION = -13244.0;  
+const float FACTOR_CONVERSION = -8403.0;   
+ 
 
 void setup() {
   Serial.begin(115200);

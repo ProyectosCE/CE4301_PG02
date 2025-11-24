@@ -1,0 +1,32 @@
+#pragma once
+
+#include "arduino_stub.h"
+
+class ESP8266WebServer {
+ public:
+  explicit ESP8266WebServer(int) {}
+  void on(const char*, void (*)(void)) {}
+  void begin() {}
+  void handleClient() {}
+  bool authenticate(const char*, const char*) { return true; }
+  void requestAuthentication() {}
+  void send(int, const char*, const String&) {}
+  void send(int, const char*, const char*) {}
+};
+
+class WiFiClass {
+ public:
+  void softAP(const char*, const char*) {}
+  IPAddress softAPIP() { return IPAddress(); }
+  void forceSleepBegin() {}
+};
+
+inline WiFiClass WiFi;
+
+class ESPClass {
+ public:
+  void deepSleep(uint64_t) {}
+};
+
+inline ESPClass ESP;
+

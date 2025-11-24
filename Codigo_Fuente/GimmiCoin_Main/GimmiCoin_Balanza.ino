@@ -1,180 +1,182 @@
+// =====================================================================================
+// Módulo de balanza (HX711) - Lectura y clasificación por rangos seguros
+// =====================================================================================
+
+#if defined(ARDUINO)
+#include <Arduino.h>
 #include <HX711.h>
-#include <math.h>  
+#else
+#include "arduino_stub.h"
+#include <cstdlib>
+// Stub para HX711 en modo desarrollo
+class HX711 {
+public:
+  void begin(int, int) {}
+  bool is_ready() { return true; }
+  void tare(int) {}
+  void set_scale(float) {}
+  long read() { return static_cast<long>((std::rand() % 170001) - 120000); }
+  long read_average(int) { return read(); }
+  float get_units(int) { return read() / -13506.98407F; }
+};
+#endif
 
 static HX711 balanza;
 
-
-// Factor de conversión calibrado 
-const float BALANZA_FACTOR_CONVERSION = -13244.0;
+// Factor de conversión calibrado (mantener para compatibilidad legacy)
+const float BALANZA_FACTOR_CONVERSION = -13506.98407F;
 
 // Número de muestras usadas en cada lectura puntual dentro de la ventana
 const int BALANZA_NUM_MUESTRAS = 3;
 
-// Estabilidad de moneda
-const float BAL_STABILITY_DELTA          = 0.30;   // máx variación (en gramos) para considerar estable
-const unsigned long BAL_STABILITY_WINDOW = 800;    // ventana de estabilidad en ms
-const unsigned long BAL_MAX_TIEMPO_MEDICION = 3000; // timeout total de medición (ms)
+// Estabilidad de moneda (en unidades HX711)
+const long BAL_STABILITY_DELTA = 6000;
+const unsigned long BAL_STABILITY_WINDOW = 1000;
+const unsigned long BAL_MAX_TIEMPO_MEDICION = 3000;
 
-// Zona muerta alrededor de 0 para considerar "sin moneda"
-const float BAL_UMBRAL_SIN_MONEDA = 0.80;  // |peso| < 0.8 g => sin moneda/ruido
+// Rangos "seguros" basados en la calibración detallada (valores en unidades HX711)
+// Se prioriza evitar solapamientos: cualquier lectura fuera de estos rangos se marca desconocida.
+const long RANGO_100_MIN = -180000;
+const long RANGO_100_MAX = -63000;
 
-// 10 colones (viejas + nuevas): aprox 0.6–2.2 g → dejamos margen seguro
-const float BAL_MIN_10   = 0.80;
-const float BAL_MAX_10   = 4.00;
+const long RANGO_50_MIN  = -60000;
+const long RANGO_50_MAX  = -10000;
 
-// 50 colones: medido ~6.5 g → margen amplio
-const float BAL_MIN_50   = 5.00;
-const float BAL_MAX_50   = 8.00;
+const long RANGO_10_MIN  = -5000;
+const long RANGO_10_MAX  = 20000;
 
-// 100 colones: medido ~9.0–10.1 g
-const float BAL_MIN_100  = 8.50;
-const float BAL_MAX_100  = 12.00;
-
-
-// Debe llamarse una sola vez desde setup(), con los pines DOUT y SCK:
-//   balanza_init(PIN_BALANZA_DOUT, PIN_BALANZA_SCK);
-void balanza_init(int pin_dout, int pin_sck) {
-  balanza.begin(pin_dout, pin_sck);
-
-  // Esperar a que el HX711 esté listo
-  while (!balanza.is_ready()) {
-    Serial.println("[BALANZA] HX711 no listo...");
-    delay(100);
+int balanza_clasificarMonedaPorRangos(long unidades) {
+  if (unidades >= RANGO_100_MIN && unidades <= RANGO_100_MAX) {
+    Serial.println(F("[BALANZA] Clasificación: 100 colones (rango seguro)"));
+    return 100;
   }
 
-  // Tare inicial (sin peso)
-  balanza.tare(15);  // promedio de 15 lecturas para offset
-
-  // Configurar el factor de escala
-  balanza.set_scale(BALANZA_FACTOR_CONVERSION);
-
-  Serial.println("[BALANZA] Inicializada (tare + factor de conversion).");
-}
-
-
-float balanza_leerGramos() {
-  if (!balanza.is_ready()) {
-    return 0.0;
-  }
-  float gramos = balanza.get_units(BALANZA_NUM_MUESTRAS);
-  return gramos;
-}
-
-
-// Clasificación de moneda por peso
-// Recibe un peso en gramos y devuelve:
-//   0 -> sin moneda / desconocida
-//   1 -> 10 colones
-//   2 -> 50 colones
-//   3 -> 100 colones
-int balanza_clasificarMoneda(float gramos) {
-  float peso = gramos;
-
-  // Por seguridad, si llega negativo lo hacemos positivo
-  if (peso < 0) {
-    peso = -peso;
+  if (unidades >= RANGO_50_MIN && unidades <= RANGO_50_MAX) {
+    Serial.println(F("[BALANZA] Clasificación: 50 colones (rango seguro)"));
+    return 50;
   }
 
-  // Zona muerta: sin moneda o ruido
-  if (fabs(peso) < BAL_UMBRAL_SIN_MONEDA) {
-    return 0;
+  if (unidades >= RANGO_10_MIN && unidades <= RANGO_10_MAX) {
+    Serial.println(F("[BALANZA] Clasificación: 10 colones (acero)"));
+    return 10;
   }
 
-  // 10 colones
-  if (peso >= BAL_MIN_10 && peso <= BAL_MAX_10) {
-    return 1;
-  }
-
-  // 50 colones
-  if (peso >= BAL_MIN_50 && peso <= BAL_MAX_50) {
-    return 2;
-  }
-
-  // 100 colones
-  if (peso >= BAL_MIN_100 && peso <= BAL_MAX_100) {
-    return 3;
-  }
-
-  // Fuera de todos los rangos conocidos
+  Serial.println(F("[BALANZA] Clasificación: desconocida (fuera de rangos seguros)"));
   return 0;
 }
 
+void balanza_init(int pin_dout, int pin_sck) {
+  balanza.begin(pin_dout, pin_sck);
 
-// Medición bloqueante con estabilidad
-//   - Se llama SOLO cuando el sensor de moneda (D2) ya detectó una moneda.
-//   - Bloquea hasta ~3 s máximo mientras:
-//       - Lee varias veces el HX711,
-//       - Forma una ventana de STABILITY_WINDOW ms,
-//       - Calcula min y max,
-//       - Si max-min <= BAL_STABILITY_DELTA => peso estable.
-//   - Si se logra estabilidad:
-//       - Devuelve true,
-//       - Escribe en pesoEstable el peso promedio de la ventana,
-//       - Escribe en tipoMoneda la clasificación (1,2,3 o 0).
-//   - Si NO se logra estabilidad antes del timeout:
-//       - Devuelve false,
-//       - Devuelve igualmente el último peso medido en pesoEstable,
-//       - Clasifica igual (por si quieres tomar una decisión basada en eso).
+  // Esperar a que el HX711 esté listo antes de continuar
+  while (!balanza.is_ready()) {
+    Serial.println(F("[BALANZA] HX711 no listo..."));
+    delay(100);
+  }
+
+  // Tare inicial (sin peso) - solo offset, sin factor de escala adicional
+  balanza.tare(15);
+
+  Serial.println(F("[BALANZA] Inicializada con tara. Trabajando con unidades directas."));
+}
+
+long balanza_leerUnidades() {
+  if (!balanza.is_ready()) {
+    return 0;
+  }
+
+  // get_units aplica la tara interna; mantenemos escala en 1 para medir en unidades crudas
+  const float unidades = balanza.get_units(BALANZA_NUM_MUESTRAS);
+  return static_cast<long>(unidades);
+}
+
+void balanza_realizarTara() {
+  unsigned long esperaInicio = millis();
+  while (!balanza.is_ready()) {
+    if (millis() - esperaInicio > 500UL) {
+      Serial.println(F("[BALANZA] No se pudo tarar: HX711 no responde."));
+      return;
+    }
+    delay(20);
+  }
+
+  balanza.tare(15);
+  Serial.println(F("[BALANZA] Tara ejecutada manualmente."));
+}
+
 bool balanza_medirMonedaEstable(float &pesoEstable, int &tipoMoneda) {
-  // Asegurarse de que el HX711 responde
+  // Asegurarse de que el HX711 responde antes de iniciar
   unsigned long inicioEspera = millis();
   while (!balanza.is_ready()) {
-    if (millis() - inicioEspera > 500) {
-      // No respondió en 500 ms
-      pesoEstable = 0.0;
-      tipoMoneda  = 0;
+    if (millis() - inicioEspera > 500UL) {
+      pesoEstable = 0.0F;
+      tipoMoneda = 0;
       return false;
     }
     delay(10);
   }
 
-  unsigned long inicioMedicion   = millis();
-  unsigned long inicioVentana    = millis();
+  unsigned long inicioMedicion = millis();
+  unsigned long inicioVentana = millis();
 
-  // Inicializamos min/max a la primera lectura válida
-  float peso = balanza.get_units(BALANZA_NUM_MUESTRAS);
-  float minPeso = peso;
-  float maxPeso = peso;
-  float ultimoPeso = peso;
+  long unidades = static_cast<long>(balanza.get_units(BALANZA_NUM_MUESTRAS));
+  long minUnidades = unidades;
+  long maxUnidades = unidades;
+  long ultimasUnidades = unidades;
 
-  // Bucle principal de medición hasta que:
-  //  - tengamos estabilidad, o
-  //  - se agote el tiempo máximo.
   while (millis() - inicioMedicion < BAL_MAX_TIEMPO_MEDICION) {
-
     if (balanza.is_ready()) {
-      peso = balanza.get_units(BALANZA_NUM_MUESTRAS);
-      ultimoPeso = peso;
+      unidades = static_cast<long>(balanza.get_units(BALANZA_NUM_MUESTRAS));
+      ultimasUnidades = unidades;
 
-      if (peso < minPeso) minPeso = peso;
-      if (peso > maxPeso) maxPeso = peso;
+      if (unidades < minUnidades) minUnidades = unidades;
+      if (unidades > maxUnidades) maxUnidades = unidades;
     }
 
-    unsigned long ahora = millis();
-
-    // ¿Ya cumplimos la ventana de estabilidad?
+    const unsigned long ahora = millis();
     if (ahora - inicioVentana >= BAL_STABILITY_WINDOW) {
-      float delta = maxPeso - minPeso;
+      const long delta = maxUnidades - minUnidades;
 
-      if (fabs(delta) <= BAL_STABILITY_DELTA) {
-        // Peso estable: usamos el promedio de la ventana
-        pesoEstable = (minPeso + maxPeso) / 2.0f;
-        tipoMoneda  = balanza_clasificarMoneda(pesoEstable);
+      if (labs(delta) <= BAL_STABILITY_DELTA) {
+        const long unidadesPromedio = (minUnidades + maxUnidades) / 2;
+        pesoEstable = static_cast<float>(unidadesPromedio);
+        tipoMoneda = balanza_clasificarMonedaPorRangos(unidadesPromedio);
+
+        Serial.print(F("[BALANZA] Estable: "));
+        Serial.print(unidadesPromedio);
+        Serial.print(F(" unidades -> "));
+        if (tipoMoneda > 0) {
+          Serial.print(F("₡"));
+          Serial.println(tipoMoneda);
+        } else {
+          Serial.println(F("desconocido"));
+        }
+
         return true;
-      } else {
-        // No estable aún: reiniciamos ventana con la última lectura
-        inicioVentana = ahora;
-        minPeso = ultimoPeso;
-        maxPeso = ultimoPeso;
       }
+
+      // No estable aún: reiniciar ventana de medición
+      inicioVentana = ahora;
+      minUnidades = ultimasUnidades;
+      maxUnidades = ultimasUnidades;
     }
 
-    // Pequeño delay entre lecturas para no saturar
     delay(50);
   }
 
-  // Si llegamos aquí, no se logró estabilidad en el tiempo máximo
-  pesoEstable = ultimoPeso;
-  tipoMoneda  = balanza_clasificarMoneda(pesoEstable);
+  // Si se agota el tiempo máximo, devolver la última lectura como referencia
+  pesoEstable = static_cast<float>(ultimasUnidades);
+  tipoMoneda = balanza_clasificarMonedaPorRangos(ultimasUnidades);
+
+  Serial.print(F("[BALANZA] Timeout: "));
+  Serial.print(ultimasUnidades);
+  Serial.print(F(" unidades -> "));
+  if (tipoMoneda > 0) {
+    Serial.print(F("₡"));
+    Serial.println(tipoMoneda);
+  } else {
+    Serial.println(F("desconocido"));
+  }
+
   return false;
 }

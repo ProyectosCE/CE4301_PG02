@@ -1,33 +1,32 @@
+// =====================================================================================
+// Módulo del servo - Control de compuerta de monedas
+// =====================================================================================
+
+#if defined(ARDUINO)
 #include <Servo.h>
+static Servo servoMotor;
+#else
+class Servo {
+public:
+  void attach(int) {}
+  void write(int) {}
+  void detach() {}
+};
+static Servo servoMotor;
+#endif
 
-Servo servoMotor;
-
-// Ángulos de operación del servo
-const int SERVO_CERRADO = 0;      // tapa cerrada
-const int SERVO_ABIERTO = 170;    // tapa abierta
-
-// Velocidad del barrido (delay entre pasos)
-const int SERVO_STEP_DELAY = 8;   // milisegundos
-
-// Inicialización del servo
 void servo_init() {
   servoMotor.attach(PIN_SERVO);
-  servoMotor.write(SERVO_CERRADO);
-  delay(300);
+  servo_irACerrado();
+  Serial.println(F("[SERVO] Servo inicializado en posición cerrada."));
 }
 
-// Movimiento suave hacia la posición abierta
 void servo_irAAbierto() {
-  for (int ang = SERVO_CERRADO; ang <= SERVO_ABIERTO; ang++) {
-    servoMotor.write(ang);
-    delay(SERVO_STEP_DELAY);
-  }
+  servoMotor.write(90);  // Posición abierta
+  Serial.println(F("[SERVO] Posición: ABIERTO"));
 }
 
-// Movimiento suave hacia la posición cerrada
 void servo_irACerrado() {
-  for (int ang = SERVO_ABIERTO; ang >= SERVO_CERRADO; ang--) {
-    servoMotor.write(ang);
-    delay(SERVO_STEP_DELAY);
-  }
+  servoMotor.write(0);   // Posición cerrada
+  Serial.println(F("[SERVO] Posición: CERRADO"));
 }
