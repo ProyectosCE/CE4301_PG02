@@ -11,6 +11,7 @@ class ESP8266WebServer {
   bool authenticate(const char*, const char*) { return true; }
   void requestAuthentication() {}
   void send(int, const char*, const String&) {}
+  void send(int, const char*, const char*) {}
 };
 
 class WiFiClass {

@@ -38,6 +38,11 @@ const unsigned long PRE_MEASURE_DELAY_MS = 1000;
 const unsigned long SERVO_OPEN_SETTLE_MS = 300;
 const unsigned long SERVO_CLOSE_SETTLE_MS = 2000;
 
+// Valores monetarios por tipo de moneda identificado
+constexpr uint32_t COIN_VALUE_10  = 10;
+constexpr uint32_t COIN_VALUE_50  = 50;
+constexpr uint32_t COIN_VALUE_100 = 100;
+
 // Configuración de red y autenticación web
 const char* WIFI_AP_SSID     = "GimmiCoin";
 const char* WIFI_AP_PASSWORD = "12345678";
@@ -49,6 +54,7 @@ ESP8266WebServer server(80);
 // Persistencia del contador en EEPROM
 constexpr uint16_t EEPROM_BYTES            = 16;
 constexpr int      EEPROM_ADDR_COUNTER     = 0;
+constexpr int      EEPROM_ADDR_MONEY       = EEPROM_ADDR_COUNTER + sizeof(uint32_t);
 constexpr uint8_t  EEPROM_WRITE_THRESHOLD  = 10;       // Guardar cada 10 monedas
 constexpr unsigned long EEPROM_WRITE_DELAY = 30000UL;  // O tras 30 s sin nuevas monedas
 
@@ -57,6 +63,8 @@ static uint32_t lastPersistedCounter = 0;  // Último valor guardado en EEPROM
 static uint32_t coinsSincePersist = 0;     // Conteo desde el último guardado
 static bool     eepromDirty = false;       // Indica si hay datos pendientes
 static unsigned long lastCoinMillis = 0;   // Última moneda detectada
+static uint32_t moneyTotal = 0;            // Monto total acumulado en colones
+static uint32_t lastPersistedMoney = 0;    // Último monto guardado en EEPROM
 bool webReady = false;
 
 // FSM principal que gobierna el flujo de la alcancía
@@ -87,12 +95,14 @@ void waitWithServer(unsigned long ms);
 void manageEepromCommit();
 void persistCounter(const char* reason);
 uint32_t getCoinCounter();
+uint32_t getMoneyTotal();
 void resetCoinCounter();
 bool isCoinSensorActive();
 void loadCounterFromEEPROM();
 const char* stateToString(SystemState state);
 void transitionTo(SystemState nextState);
 void processStateMachine();
+static uint32_t coinValueFromType(int coinType);
 
 // Declaraciones adelantadas de módulos hardware
 void sensorMoneda_setConteo(uint32_t value);
@@ -242,6 +252,15 @@ const char* stateToString(SystemState state) {
   }
 }
 
+static uint32_t coinValueFromType(int coinType) {
+  switch (coinType) {
+    case 1: return COIN_VALUE_10;
+    case 2: return COIN_VALUE_50;
+    case 3: return COIN_VALUE_100;
+    default: return 0;
+  }
+}
+
 
 /* Function: transitionTo
    Cambia el estado actual de la FSM y registra la marca de tiempo del cambio.
@@ -329,6 +348,17 @@ void processStateMachine() {
         Serial.print(F("[FSM] Actuando moneda reconocida (tipo "));
         Serial.print(fsmCtx.lastCoinType);
         Serial.println(F(")"));
+
+        const uint32_t coinValue = coinValueFromType(fsmCtx.lastCoinType);
+        if (coinValue > 0) {
+          moneyTotal += coinValue;
+          eepromDirty = true;
+
+          Serial.print(F("[FSM] Valor acreditado = ₡"));
+          Serial.println(coinValue);
+          Serial.print(F("[FSM] Total acumulado = ₡"));
+          Serial.println(moneyTotal);
+        }
 
         switch (fsmCtx.lastCoinType) {
           case 1:
@@ -422,16 +452,24 @@ void manageEepromCommit() {
      Debe invocarse solo cuando eepromDirty es verdadero.
 */
 void persistCounter(const char* reason) {
-  uint32_t value = getCoinCounter();
-  EEPROM.put(EEPROM_ADDR_COUNTER, value);
+  const uint32_t counterValue = getCoinCounter();
+  const uint32_t moneyValue   = getMoneyTotal();
+
+  EEPROM.put(EEPROM_ADDR_COUNTER, counterValue);
+  EEPROM.put(EEPROM_ADDR_MONEY, moneyValue);
   EEPROM.commit();
-  lastPersistedCounter = value;
-  coinsSincePersist = 0;
-  eepromDirty = false;
+
+  lastPersistedCounter = counterValue;
+  lastPersistedMoney   = moneyValue;
+  coinsSincePersist    = 0;
+  eepromDirty          = false;
+
   Serial.print(F("[EEPROM] Guardado contador ("));
   Serial.print(reason);
   Serial.print(F(") = "));
-  Serial.println(value);
+  Serial.println(counterValue);
+  Serial.print(F("[EEPROM] Dinero acumulado = ₡"));
+  Serial.println(moneyValue);
 }
 
 
@@ -446,6 +484,10 @@ void persistCounter(const char* reason) {
 */
 uint32_t getCoinCounter() {
   return coinCounter;
+}
+
+uint32_t getMoneyTotal() {
+  return moneyTotal;
 }
 
 
@@ -466,8 +508,11 @@ void resetCoinCounter() {
   coinCounter = 0;
   lastPersistedCounter = 0;
   coinsSincePersist = 0;
+  moneyTotal = 0;
+  lastPersistedMoney = 0;
   eepromDirty = false;
   EEPROM.put(EEPROM_ADDR_COUNTER, static_cast<uint32_t>(0));
+  EEPROM.put(EEPROM_ADDR_MONEY, static_cast<uint32_t>(0));
   EEPROM.commit();
   Serial.println(F("[MAIN] Contador reseteado desde web."));
 }
@@ -509,4 +554,16 @@ void loadCounterFromEEPROM() {
   lastPersistedCounter = stored;
   Serial.print(F("[EEPROM] Conteo restaurado = "));
   Serial.println(coinCounter);
+    coinsSincePersist = 0;
+
+    uint32_t storedMoney = 0;
+    EEPROM.get(EEPROM_ADDR_MONEY, storedMoney);
+    if (storedMoney == 0xFFFFFFFF) {
+      storedMoney = 0;
+    }
+    moneyTotal = storedMoney;
+    lastPersistedMoney = storedMoney;
+
+    Serial.print(F("[EEPROM] Dinero restaurado = ₡"));
+    Serial.println(moneyTotal);
 }

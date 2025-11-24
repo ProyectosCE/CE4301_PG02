@@ -5,6 +5,8 @@
 #endif
 #include "arduino_compat.h"
 
+#include <stdio.h>
+
 #if GM_USING_ARDUINO_CORE
 #include "ESP8266WiFi.h"
 #include "ESP8266WebServer.h"
@@ -18,6 +20,7 @@ extern ESP8266WebServer server;
 extern bool webReady;
 
 uint32_t getCoinCounter();
+uint32_t getMoneyTotal();
 bool isCoinSensorActive();
 void resetCoinCounter();
 
@@ -65,11 +68,12 @@ void startWebServer(const char* ssid, const char* password) {
 		 - void - no retorna valor.
 */
 static void handleRoot() {
-	String html = R"rawliteral(
+	const char* html = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
 <title>Alcancía Inteligente</title>
+	<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 	body {
@@ -120,14 +124,12 @@ static void handleRoot() {
 </div>
 
 <script>
-const valorMoneda = 100;
-
 setInterval(function() {
 	fetch('/estado')
 		.then(response => response.json())
 		.then(data => {
 			document.getElementById('pulses').innerText = data.pulses;
-			document.getElementById('money').innerText = '₡' + (data.pulses * valorMoneda);
+			document.getElementById('money').innerText = '₡' + data.money;
 			document.getElementById('pressed').innerText = data.pressed ? 'DETECTADO' : 'LIBRE';
 		})
 		.catch(() => {
@@ -140,7 +142,7 @@ setInterval(function() {
 </html>
 )rawliteral";
 
-  server.send(200, "text/html", html);
+	server.send(200, "text/html; charset=utf-8", html);
 }
 
 /* Function: handleEstado
@@ -154,9 +156,14 @@ setInterval(function() {
 */
 static void handleEstado() {
   const bool activo = isCoinSensorActive();
-  String json = "{\"pulses\":" + String(getCoinCounter()) +
-                ",\"pressed\":" + (activo ? "true" : "false") + "}";
-  server.send(200, "application/json", json);
+	char buffer[96];
+	snprintf(buffer,
+					 sizeof(buffer),
+					 "{\"pulses\":%lu,\"money\":%lu,\"pressed\":%s}",
+					 static_cast<unsigned long>(getCoinCounter()),
+					 static_cast<unsigned long>(getMoneyTotal()),
+					 activo ? "true" : "false");
+		server.send(200, "application/json", buffer);
 }
 
 /* Function: handleAdmin
@@ -177,11 +184,12 @@ static void handleAdmin() {
     return server.requestAuthentication();
   }
 
-	String html = R"rawliteral(
+	const char* html = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
 <title>Admin GimmiCoin</title>
+	<meta charset="UTF-8">
 <meta name='viewport' content='width=device-width, initial-scale=1.0'>
 <style>
  body{font-family:Arial;margin:30px;background:#f7f9fb;color:#222;}
@@ -199,20 +207,22 @@ static void handleAdmin() {
 <div class='box'>
  <p>Monedas actuales:</p>
  <p id='pulses' class='value'>Cargando...</p>
+ <p>Dinero acumulado:</p>
+ <p id='money' class='value'>Cargando...</p>
  <p><button onclick='resetCounter()'>Reset contador</button></p>
  <p id='status'></p>
  <p><a href='/'>Volver a principal</a></p>
 </div>
 <script>
-function load(){fetch('/estado').then(r=>r.json()).then(d=>{document.getElementById('pulses').innerText=d.pulses;});}
-function resetCounter(){fetch('/reset').then(r=>r.json()).then(d=>{if(d.ok){document.getElementById('status').innerHTML='<span class="ok">Reset correcto</span>';load();}else{document.getElementById('status').innerHTML='<span class="fail">Error</span>';}}).catch(()=>{document.getElementById('status').innerHTML='<span class="fail">Fallo de red</span>';});}
+function load(){fetch('/estado').then(r=>r.json()).then(d=>{document.getElementById('pulses').innerText=d.pulses;document.getElementById('money').innerText='₡'+d.money;});}
+function resetCounter(){fetch('/reset').then(r=>r.json()).then(d=>{if(d.ok){document.getElementById('status').innerHTML='<span class="ok">Reset correcto</span>';document.getElementById('pulses').innerText=d.pulses;document.getElementById('money').innerText='₡'+d.money;}else{document.getElementById('status').innerHTML='<span class="fail">Error</span>';}}).catch(()=>{document.getElementById('status').innerHTML='<span class="fail">Fallo de red</span>';});}
 load();
 </script>
 </body>
 </html>
 )rawliteral";
 
-  server.send(200, "text/html", html);
+	server.send(200, "text/html; charset=utf-8", html);
 }
 
 /* Function: handleReset
@@ -234,6 +244,11 @@ static void handleReset() {
 
   resetCoinCounter();
 
-  String json = "{\"ok\":true,\"pulses\":0}";
-  server.send(200, "application/json", json);
+	char buffer[96];
+	snprintf(buffer,
+					sizeof(buffer),
+					"{\"ok\":true,\"pulses\":%lu,\"money\":%lu}",
+					static_cast<unsigned long>(getCoinCounter()),
+					static_cast<unsigned long>(getMoneyTotal()));
+			server.send(200, "application/json", buffer);
 }

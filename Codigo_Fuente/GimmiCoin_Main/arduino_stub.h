@@ -3,8 +3,23 @@
 #include <cstdint>
 #include <cstddef>
 #include <string>
+#include <utility>
 
-using String = std::string;
+class String : public std::string {
+ public:
+  using std::string::string;
+
+  String() = default;
+  String(const char* s) : std::string(s ? s : "") {}
+  String(const std::string& other) : std::string(other) {}
+  String(std::string&& other) noexcept : std::string(std::move(other)) {}
+  String(unsigned long value) : std::string(std::to_string(value)) {}
+  String(long value) : std::string(std::to_string(value)) {}
+  String(unsigned int value) : std::string(std::to_string(value)) {}
+  String(int value) : std::string(std::to_string(value)) {}
+  String(float value) : std::string(std::to_string(value)) {}
+  String(double value) : std::string(std::to_string(value)) {}
+};
 
 #ifndef F
 #define F(x) x
@@ -12,6 +27,10 @@ using String = std::string;
 
 #ifndef PROGMEM
 #define PROGMEM
+#endif
+
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
 #endif
 
 // NodeMCU style pin aliases (approximate)
